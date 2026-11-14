@@ -174,6 +174,7 @@
         <div class="card">
           <h2>Tambah Siswa</h2>
           <label>Nama</label><input id="fNama" placeholder="Nama siswa">
+          <label>Nama panggilan (tampil di jadwal)</label><input id="fPanggilan" placeholder="Contoh: Aira" autocomplete="off">
           <label>No. Telepon (opsional)</label><input id="fTelp" inputmode="tel" placeholder="08xxxxxxxxxx">
           <label>Program</label><select id="fProgram"></select>
           <label>Frekuensi per minggu</label>
@@ -368,12 +369,12 @@ async function muatSiswa(){
 function renderSiswa(){
   const q = $('#cari').value.trim().toLowerCase();
   const pf = $('#cariProgram').value;
-  const list = SISWA.filter(s => (!q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) && (!pf || s.program === pf));
+  const list = SISWA.filter(s => (!q || s.nama.toLowerCase().includes(q) || (s.panggilan || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) && (!pf || s.program === pf));
   $('#tbSiswa').innerHTML = list.map(s => {
     const cls = s.sisa <= 0 ? 'b-err' : (s.sisa <= 2 ? 'b-warn' : 'b-ok');
     return `<tr>
       <td>${esc(s.id)}</td>
-      <td>${esc(s.nama)}<div class="hint" style="margin:0">${esc(s.telepon)}</div></td>
+      <td>${esc(s.nama)}${s.panggilan ? ' <span class="badge b-ok">' + esc(s.panggilan) + '</span>' : ''}<div class="hint" style="margin:0">${esc(s.telepon)}</div></td>
       <td>${s.program ? esc(s.program) + '<div class="hint" style="margin:0">' + s.frek + 'x per minggu</div>' : '<span class="badge b-mute">Belum diatur</span>'}</td>
       <td>${s.terpakai} / ${s.total}</td>
       <td><span class="badge ${cls}">${s.sisa < 0 ? 'Menunggu bayar ' + (-s.sisa) : s.sisa}</span></td>
@@ -382,6 +383,7 @@ function renderSiswa(){
         <button class="btn sm" data-a="qr" data-id="${esc(s.id)}">QR</button>
         <button class="btn sm sec" data-a="paket" data-id="${esc(s.id)}">+Paket</button>
         <button class="btn sm sec" data-a="program" data-id="${esc(s.id)}">Program</button>
+        <button class="btn sm sec" data-a="panggilan" data-id="${esc(s.id)}">Panggilan</button>
         <button class="btn sm sec" data-a="status" data-id="${esc(s.id)}">${s.status==='Aktif'?'Nonaktifkan':'Aktifkan'}</button>
       </div></td></tr>`;
   }).join('') || '<tr><td colspan="7" class="hint">Belum ada siswa.</td></tr>';
@@ -400,10 +402,10 @@ $('#cari').oninput = renderSiswa;
 $('#btnTambah').onclick = async () => {
   const btn = $('#btnTambah'); btn.disabled = true;
   try {
-    const r = await run('tambahSiswa', { nama:$('#fNama').value, telepon:$('#fTelp').value, paket:$('#fPaket').value,
+    const r = await run('tambahSiswa', { nama:$('#fNama').value, panggilan:$('#fPanggilan').value, telepon:$('#fTelp').value, paket:$('#fPaket').value,
       program:$('#fProgram').value, frek:$('#fFrek').value });
     toast('Tersimpan: ' + r.id);
-    $('#fNama').value=''; $('#fTelp').value='';
+    $('#fNama').value=''; $('#fPanggilan').value=''; $('#fTelp').value='';
     await muatSiswa();
     const s = SISWA.find(x => x.id === r.id); if (s) bukaQR(s);
   } catch(e){ toast(e.message); }
@@ -415,6 +417,12 @@ $('#tbSiswa').addEventListener('click', async e => {
   const s = SISWA.find(x => x.id === b.dataset.id); if(!s) return;
   if (b.dataset.a === 'qr') return bukaQR(s);
   if (b.dataset.a === 'program') return bukaProgram(s);
+  if (b.dataset.a === 'panggilan') {
+    const v = prompt('Nama panggilan untuk ' + s.nama + ' (tampil di jadwal).\nKosongkan untuk memakai nama lengkap.', s.panggilan || '');
+    if (v === null) return;
+    try { await run('ubahPanggilan', s.id, v); toast('Nama panggilan disimpan'); muatSiswa(); } catch(err){ toast(err.message); }
+    return;
+  }
   if (b.dataset.a === 'paket') {
     const j = prompt('Tambah berapa pertemuan untuk ' + s.nama + '?', '8');
     if (!j) return;
@@ -611,11 +619,12 @@ function gayaEntry(j){
   if (j.status === 'Batal (dihitung)') return 'background:#fde8e8;color:#b91c1c';
   return '';
 }
+function tampil(j){ return j.tampil || j.nama; }   // nama panggilan bila ada
 function isiEntry(j){
   if (j.status === 'Blok') return esc(j.nama);
-  if (j.status === 'Hadir') return esc(j.nama) + '<small style="display:block;color:var(--ok)">✓ hadir</small>';
-  if (batalJ(j)) return '<s>' + esc(j.nama) + '</s><small style="display:block">' + (j.status === 'Batal (dihitung)' ? 'batal (dihitung)' : 'batal') + '</small>';
-  return esc(j.nama);
+  if (j.status === 'Hadir') return esc(tampil(j)) + '<small style="display:block;color:var(--ok)">✓ hadir</small>';
+  if (batalJ(j)) return '<s>' + esc(tampil(j)) + '</s><small style="display:block">' + (j.status === 'Batal (dihitung)' ? 'batal (dihitung)' : 'batal') + '</small>';
+  return esc(tampil(j));
 }
 
 async function muatJadwal(){
@@ -693,7 +702,7 @@ function bukaSlot(){
   $('#sTgl').textContent = tglPanjang($('#jTgl').value);
   let info = '', aksi = '';
   if (e) {
-    info = `<div style="padding:8px 10px;border-radius:10px;margin:10px 0 0;${gayaEntry(e) || 'background:#f2f7fa'}"><b>${esc(e.nama)}</b>${e.id ? ' <span class="hint" style="margin:0">' + esc(e.id) + '</span>' : ''}<div class="hint" style="margin:2px 0 0">${esc(e.status)}${e.ket ? ' · ' + esc(e.ket) : ''}</div></div>`;
+    info = `<div style="padding:8px 10px;border-radius:10px;margin:10px 0 0;${gayaEntry(e) || 'background:#f2f7fa'}"><b>${esc(tampil(e))}</b>${e.id ? ' <span class="hint" style="margin:0">' + esc(e.id) + (tampil(e) !== e.nama ? ' · ' + esc(e.nama) : '') + '</span>' : ''}<div class="hint" style="margin:2px 0 0">${esc(e.status)}${e.ket ? ' · ' + esc(e.ket) : ''}</div></div>`;
     if (e.status === 'Terkonfirmasi') aksi = '<button class="btn sm danger" id="sBatal">Batalkan kehadiran</button><button class="btn sm sec" id="sHapus">Hapus (salah input)</button>';
     else if (e.status === 'Blok') aksi = '<button class="btn sm sec" id="sHapus">Hapus kotak</button>';
   }
@@ -709,10 +718,10 @@ $('#btnTutupSlot').onclick = () => $('#modalSlot').classList.add('hidden');
 function renderPilih(){
   const box = $('#jPilih'); if (!box) return;
   const q = $('#jCari').value.trim().toLowerCase(), pf = $('#jProgram').value;
-  const semua = SISWA.filter(s => s.status === 'Aktif' && (!pf || s.program === pf) && (!q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
+  const semua = SISWA.filter(s => s.status === 'Aktif' && (!pf || s.program === pf) && (!q || s.nama.toLowerCase().includes(q) || (s.panggilan || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
   const list = semua.slice(0, 60);
   box.innerHTML = list.map(s =>
-    `<button class="btn sec" style="display:block;width:100%;text-align:left;margin:3px 0;padding:7px 10px;font-size:14px" data-id="${esc(s.id)}">${esc(s.nama)} <span class="hint" style="margin:0">${esc(s.id)} · ${esc(s.program || '-')}${s.frek ? ' ' + s.frek + 'x' : ''}${s.sisa <= 0 ? ' · paket habis' : ''}</span></button>`).join('')
+    `<button class="btn sec" style="display:block;width:100%;text-align:left;margin:3px 0;padding:7px 10px;font-size:14px" data-id="${esc(s.id)}">${esc(s.panggilan || s.nama)}${s.panggilan ? ' <span class="hint" style="margin:0">(' + esc(s.nama) + ')</span>' : ''} <span class="hint" style="margin:0">${esc(s.id)} · ${esc(s.program || '-')}${s.frek ? ' ' + s.frek + 'x' : ''}${s.sisa <= 0 ? ' · paket habis' : ''}</span></button>`).join('')
     + (semua.length > list.length ? `<div class="hint" style="padding:6px">Menampilkan ${list.length} dari ${semua.length}. Ketik nama untuk mencari.</div>` : '')
     || '<div class="hint" style="padding:6px">Tidak ada siswa.</div>';
 }
@@ -790,7 +799,7 @@ function sesuaikanCetak(){
   const n = Math.max(KOLOM.length, 1);
   const wKol = (A4.lebarMm - A4.jamMm) / n;                 // lebar tiap kolom pelatih (mm)
   let kata = 4;                                              // kata terpanjang di jadwal (huruf)
-  JADWAL.forEach(j => String(j.nama).split(/[\s()]+/).forEach(w => { if (w.length > kata) kata = w.length; }));
+  JADWAL.forEach(j => String(j.status === 'Blok' ? j.nama : tampil(j)).split(/[\s()]+/).forEach(w => { if (w.length > kata) kata = w.length; }));
   // font dibatasi agar kata terpanjang muat selebar kolom (tidak terpotong di tengah kata), min 5pt
   let pt = Math.max(5, Math.min(11, wKol / 2.6, (wKol - 2.5) / (kata * 0.25)));
   let hrow = 22;                                             // baris dibuat setinggi mungkin, lalu dikecilkan sampai muat
