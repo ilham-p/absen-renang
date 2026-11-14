@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Absensi Les Berenang</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#f2f7fa; --card:#fff; --ink:#12303d; --mute:#6b8591; --line:#dbe7ed;
+    --brand:#0b6e99; --brand2:#0a5a7e; --ok:#16a34a; --okbg:#e8f8ee;
+    --warn:#d97706; --warnbg:#fff4e0; --err:#dc2626; --errbg:#fde8e8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(135deg,#0b6e99,#14a3c7);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:18px;margin:0}
+  header button{background:rgba(255,255,255,.2);color:#fff;border:0;padding:6px 12px;border-radius:8px;cursor:pointer}
+  nav{display:flex;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  nav button{flex:1;padding:12px 6px;border:0;background:none;font-size:14px;color:var(--mute);cursor:pointer;border-bottom:3px solid transparent}
+  nav button.active{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+  main{max-width:960px;margin:0 auto;padding:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  h2{font-size:16px;margin:0 0 10px}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;color:var(--ink)}
+  label{font-size:13px;color:var(--mute);display:block;margin:8px 0 4px}
+  .btn{background:var(--brand);color:#fff;border:0;padding:10px 16px;border-radius:10px;font-size:15px;cursor:pointer}
+  .btn:hover{background:var(--brand2)}
+  .btn.sec{background:#e6f1f6;color:var(--brand)}
+  .btn.danger{background:var(--errbg);color:var(--err)}
+  .btn.sm{padding:5px 10px;font-size:13px;border-radius:8px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row > *{flex:1;min-width:120px}
+  .grid2{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+  #reader{width:100%;max-width:420px;margin:10px auto 0;border-radius:12px;overflow:hidden}
+  #reader-file{display:none}
+  .result{border-radius:14px;padding:16px;text-align:center;margin-top:12px;border:2px solid}
+  .result.ok{background:var(--okbg);border-color:var(--ok)}
+  .result.warn{background:var(--warnbg);border-color:var(--warn)}
+  .result.err{background:var(--errbg);border-color:var(--err)}
+  .result .big{font-size:22px;font-weight:700;margin:4px 0}
+  .result .sub{font-size:15px}
+  .result .count{font-size:36px;font-weight:800;margin:6px 0}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{color:var(--mute);font-weight:600;font-size:12px;text-transform:uppercase}
+  .tablewrap{overflow-x:auto}
+  .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600}
+  .b-ok{background:var(--okbg);color:var(--ok)} .b-warn{background:var(--warnbg);color:var(--warn)} .b-err{background:var(--errbg);color:var(--err)} .b-mute{background:#eceff1;color:#607d8b}
+  .acts{display:flex;gap:4px;flex-wrap:wrap}
+  .hidden{display:none!important}
+  #login{max-width:340px;margin:12vh auto;text-align:center}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#12303d;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:90%}
+  #toast.show{opacity:1}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px}
+  #modal .box{background:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%;text-align:center}
+  #kartu .nama{font-size:20px;font-weight:700;margin-top:10px}
+  #kartu .idtxt{font-size:16px;color:var(--mute);letter-spacing:1px}
+  #qrbox{display:flex;justify-content:center;margin-top:6px}
+  .hint{font-size:12px;color:var(--mute);margin-top:8px}
+  @media print{
+    body *{visibility:hidden}
+    #kartu,#kartu *{visibility:visible}
+    #kartu{position:absolute;left:0;top:0;width:100%}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" class="card">
+  <h2>🏊 Absensi Les Berenang</h2>
+  <label>Masukkan PIN petugas</label>
+  <input id="pin" type="password" inputmode="numeric" placeholder="PIN" autocomplete="off">
+  <div style="margin-top:12px"><button class="btn" id="btnLogin" style="width:100%">Masuk</button></div>
+  <div id="loginErr" class="hint" style="color:var(--err)"></div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header>
+    <h1>🏊 Absensi Les Berenang</h1>
+    <button id="btnKeluar">Keluar</button>
+  </header>
+  <nav>
+    <button data-tab="scan" class="active">📷 Absen</button>
+    <button data-tab="siswa">👥 Siswa</button>
+    <button data-tab="riwayat">🕘 Riwayat</button>
+  </nav>
+
+  <main>
+    <!-- TAB ABSEN -->
+    <section id="tab-scan">
+      <div class="card">
+        <h2>Scan QR Siswa</h2>
+        <div class="row">
+          <button class="btn" id="btnKamera">Mulai Kamera</button>
+          <button class="btn sec" id="btnFoto">Scan dari Foto</button>
+        </div>
+        <input type="file" id="fileQR" accept="image/*" capture="environment" class="hidden">
+        <div id="reader"></div>
+        <div id="reader-file"></div>
+        <div id="kameraErr" class="hint" style="color:var(--err)"></div>
+
+        <label style="margin-top:14px">Atau ketik ID siswa</label>
+        <div class="row">
+          <input id="manualId" placeholder="Contoh: SW-0001" autocapitalize="characters" autocomplete="off">
+          <button class="btn" id="btnManual" style="flex:0 0 auto">Absen</button>
+        </div>
+        <div id="hasil"></div>
+      </div>
+    </section>
+
+    <!-- TAB SISWA -->
+    <section id="tab-siswa" class="hidden">
+      <div class="grid2">
+        <div class="card">
+          <h2>Tambah Siswa</h2>
+          <label>Nama</label><input id="fNama" placeholder="Nama siswa">
+          <label>No. Telepon (opsional)</label><input id="fTelp" inputmode="tel" placeholder="08xxxxxxxxxx">
+          <label>Jumlah pertemuan dalam paket</label><input id="fPaket" type="number" min="0" value="8">
+          <div style="margin-top:12px"><button class="btn" id="btnTambah">Simpan Siswa</button></div>
+        </div>
+        <div class="card">
+          <h2>Ringkasan</h2>
+          <div id="ringkasan" style="line-height:1.9"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="align-items:center;margin-bottom:8px">
+          <h2 style="margin:0;flex:1 1 auto">Daftar Siswa</h2>
+          <input id="cari" placeholder="Cari nama / ID…" style="flex:1 1 180px">
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>ID</th><th>Nama</th><th>Terpakai</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody id="tbSiswa"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB RIWAYAT -->
+    <section id="tab-riwayat" class="hidden">
+      <div class="card">
+        <div class="row" style="align-items:center;margin-bottom:8px">
+          <h2 style="margin:0;flex:1 1 auto">Riwayat Absensi</h2>
+          <select id="filterRiwayat" style="flex:1 1 180px"><option value="">Semua siswa</option></select>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Waktu</th><th>Nama</th><th>Ke-</th><th>Sisa</th><th></th></tr></thead>
+            <tbody id="tbRiwayat"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- MODAL QR -->
+<div id="modal" class="hidden">
+  <div class="box">
+    <div id="kartu">
+      <div id="qrbox"></div>
+      <div class="nama" id="kNama"></div>
+      <div class="idtxt" id="kId"></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="btnUnduh">Unduh PNG</button>
+      <button class="btn sec" id="btnCetak">Cetak</button>
+      <button class="btn sec" id="btnTutup">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// =====================================================================
+// WAJIB DIISI: tempel URL Web App Apps Script Anda (yang berakhiran /exec)
+// =====================================================================
+const API_URL = 'GANTI_DENGAN_URL_WEB_APP_ANDA';
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+let PIN = '';
+let SISWA = [];
+let scanner = null, kameraAktif = false;
+let lastKode = '', lastWaktu = 0;
+let kartuAktif = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2800); }
+
+// Panggil API Apps Script. Tanpa header khusus agar tidak memicu preflight CORS.
+async function run(fn, ...args){
+  if (API_URL.indexOf('GANTI_') === 0) throw new Error('API_URL di index.html belum diisi');
+  let res;
+  try {
+    res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ fn, args: [PIN, ...args] }) });
+  } catch(e){
+    throw new Error('Tidak bisa terhubung ke server. Periksa internet dan URL Web App.');
+  }
+  let j;
+  try { j = await res.json(); } catch(e){ throw new Error('Respons server tidak valid. Pastikan Web App sudah di-deploy (akses: Anyone).'); }
+  if (j.status !== 'ok') throw new Error(j.message || 'Terjadi kesalahan');
+  return j.data;
+}
+
+// ---------- LOGIN ----------
+async function login(pin){
+  PIN = pin;
+  try {
+    await run('cekPin');
+    sessionStorage.setItem('pin', pin);
+    $('#login').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    await muatSiswa();
+    $('#manualId').focus();
+  } catch(e){
+    PIN = ''; sessionStorage.removeItem('pin');
+    $('#loginErr').textContent = e.message;
+    $('#login').classList.remove('hidden');
+    $('#app').classList.add('hidden');
+  }
+}
+$('#btnLogin').onclick = () => login($('#pin').value.trim());
+$('#pin').addEventListener('keydown', e => { if(e.key==='Enter') login($('#pin').value.trim()); });
+$('#btnKeluar').onclick = () => { sessionStorage.removeItem('pin'); location.reload(); };
+const saved = sessionStorage.getItem('pin');
+if (saved) login(saved);
+
+// ---------- TAB ----------
+$$('nav button').forEach(b => b.onclick = () => {
+  $$('nav button').forEach(x => x.classList.toggle('active', x === b));
+  ['scan','siswa','riwayat'].forEach(t => $('#tab-'+t).classList.toggle('hidden', t !== b.dataset.tab));
+  if (b.dataset.tab !== 'scan') stopKamera();
+  if (b.dataset.tab === 'riwayat') muatRiwayat();
+  if (b.dataset.tab === 'siswa') muatSiswa();
+});
+
+// ---------- SISWA ----------
+async function muatSiswa(){
+  try { SISWA = await run('getSiswa'); renderSiswa(); isiFilter(); } catch(e){ toast(e.message); }
+}
+function renderSiswa(){
+  const q = $('#cari').value.trim().toLowerCase();
+  const list = SISWA.filter(s => !q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+  $('#tbSiswa').innerHTML = list.map(s => {
+    const cls = s.sisa <= 0 ? 'b-err' : (s.sisa <= 2 ? 'b-warn' : 'b-ok');
+    return `<tr>
+      <td>${esc(s.id)}</td>
+      <td>${esc(s.nama)}<div class="hint" style="margin:0">${esc(s.telepon)}</div></td>
+      <td>${s.terpakai} / ${s.total}</td>
+      <td><span class="badge ${cls}">${s.sisa}</span></td>
+      <td><span class="badge ${s.status==='Aktif'?'b-ok':'b-mute'}">${esc(s.status)}</span></td>
+      <td><div class="acts">
+        <button class="btn sm" data-a="qr" data-id="${esc(s.id)}">QR</button>
+        <button class="btn sm sec" data-a="paket" data-id="${esc(s.id)}">+Paket</button>
+        <button class="btn sm sec" data-a="status" data-id="${esc(s.id)}">${s.status==='Aktif'?'Nonaktifkan':'Aktifkan'}</button>
+      </div></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="hint">Belum ada siswa.</td></tr>';
+
+  const aktif = SISWA.filter(s => s.status === 'Aktif');
+  $('#ringkasan').innerHTML =
+    `Siswa aktif: <b>${aktif.length}</b><br>` +
+    `Paket hampir habis (≤2): <b>${aktif.filter(s=>s.sisa>0&&s.sisa<=2).length}</b><br>` +
+    `Paket habis: <b>${aktif.filter(s=>s.sisa<=0).length}</b>`;
+}
+$('#cari').oninput = renderSiswa;
+
+$('#btnTambah').onclick = async () => {
+  const btn = $('#btnTambah'); btn.disabled = true;
+  try {
+    const r = await run('tambahSiswa', { nama:$('#fNama').value, telepon:$('#fTelp').value, paket:$('#fPaket').value });
+    toast('Tersimpan: ' + r.id);
+    $('#fNama').value=''; $('#fTelp').value='';
+    await muatSiswa();
+    const s = SISWA.find(x => x.id === r.id); if (s) bukaQR(s);
+  } catch(e){ toast(e.message); }
+  btn.disabled = false;
+};
+
+$('#tbSiswa').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if(!b) return;
+  const s = SISWA.find(x => x.id === b.dataset.id); if(!s) return;
+  if (b.dataset.a === 'qr') return bukaQR(s);
+  if (b.dataset.a === 'paket') {
+    const j = prompt('Tambah berapa pertemuan untuk ' + s.nama + '?', '8');
+    if (!j) return;
+    try { const r = await run('tambahPaket', s.id, j); toast(`Sisa ${s.nama}: ${r.sisa}`); muatSiswa(); } catch(err){ toast(err.message); }
+  }
+  if (b.dataset.a === 'status') {
+    try { await run('ubahStatus', s.id, s.status==='Aktif'?'Nonaktif':'Aktif'); muatSiswa(); } catch(err){ toast(err.message); }
+  }
+});
+
+// ---------- QR KARTU ----------
+function bukaQR(s){
+  kartuAktif = s;
+  $('#qrbox').innerHTML = '';
+  new QRCode($('#qrbox'), { text: s.id, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
+  $('#kNama').textContent = s.nama;
+  $('#kId').textContent = s.id;
+  $('#modal').classList.remove('hidden');
+}
+$('#btnTutup').onclick = () => $('#modal').classList.add('hidden');
+$('#btnCetak').onclick = () => window.print();
+$('#btnUnduh').onclick = () => {
+  const qr = $('#qrbox canvas'); if(!qr || !kartuAktif) return;
+  const c = document.createElement('canvas'); c.width = 360; c.height = 440;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height);
+  x.drawImage(qr, 60, 30, 240, 240);
+  x.fillStyle = '#12303d'; x.textAlign = 'center';
+  x.font = 'bold 24px sans-serif'; x.fillText(kartuAktif.nama, 180, 320, 330);
+  x.fillStyle = '#6b8591'; x.font = '20px sans-serif'; x.fillText(kartuAktif.id, 180, 355);
+  x.font = '14px sans-serif'; x.fillText('Kartu Absensi Les Berenang', 180, 410);
+  const a = document.createElement('a');
+  a.href = c.toDataURL('image/png'); a.download = 'QR-' + kartuAktif.id + '.png'; a.click();
+};
+
+// ---------- SCAN ----------
+function beep(ok){
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = ok ? 880 : 240; g.gain.value = 0.15;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.12 : 0.35));
+  } catch(e){}
+}
+function tampilHasil(r){
+  const el = $('#hasil');
+  if (r.loading) { el.innerHTML = '<div class="result warn"><div class="sub">Memproses…</div></div>'; return; }
+  if (r.ok) {
+    el.innerHTML = `<div class="result ${r.sisa<=1?'warn':'ok'}">
+      <div class="sub">✅ Absen berhasil</div>
+      <div class="big">${esc(r.nama)}</div>
+      <div class="count">Pertemuan ke-${r.ke}</div>
+      <div class="sub">Sisa: <b>${r.sisa}</b> dari ${r.total} pertemuan</div>
+      ${r.msg ? `<div class="sub" style="margin-top:6px">⚠️ ${esc(r.msg)}</div>` : ''}
+    </div>`;
+  } else {
+    const cls = (r.type === 'duplikat') ? 'warn' : 'err';
+    el.innerHTML = `<div class="result ${cls}">
+      <div class="sub">${r.type==='duplikat'?'⚠️':'❌'} Gagal</div>
+      ${r.nama ? `<div class="big">${esc(r.nama)}</div>` : ''}
+      <div class="sub">${esc(r.msg)}</div>
+    </div>`;
+  }
+}
+async function prosesKode(teks){
+  const id = String(teks).trim().toUpperCase();
+  const now = Date.now();
+  if (id === lastKode && now - lastWaktu < 4000) return; // cegah scan berulang
+  lastKode = id; lastWaktu = now;
+  tampilHasil({loading:true});
+  try {
+    const r = await run('absen', id);
+    tampilHasil(r); beep(r.ok);
+    if (r.ok) muatSiswa();
+  } catch(e){ tampilHasil({ok:false, type:'error', msg:e.message}); beep(false); }
+}
+async function mulaiKamera(){
+  $('#kameraErr').textContent = '';
+  try {
+    if (!scanner) scanner = new Html5Qrcode('reader');
+    await scanner.start({ facingMode:'environment' }, { fps:10, qrbox:{ width:230, height:230 } }, t => prosesKode(t), () => {});
+    kameraAktif = true; $('#btnKamera').textContent = 'Matikan Kamera';
+  } catch(e){
+    kameraAktif = false;
+    $('#kameraErr').textContent = 'Kamera tidak bisa dibuka (' + (e && e.message ? e.message : e) +
+      '). Izinkan akses kamera di browser, atau pakai "Scan dari Foto" / input manual.';
+  }
+}
+async function stopKamera(){
+  if (scanner && kameraAktif) { try { await scanner.stop(); } catch(e){} }
+  kameraAktif = false; $('#btnKamera').textContent = 'Mulai Kamera';
+}
+$('#btnKamera').onclick = () => kameraAktif ? stopKamera() : mulaiKamera();
+$('#btnFoto').onclick = () => $('#fileQR').click();
+$('#fileQR').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try {
+    const h = new Html5Qrcode('reader-file');
+    const teks = await h.scanFile(f, false);
+    lastKode = ''; prosesKode(teks);
+  } catch(err){ tampilHasil({ok:false, type:'error', msg:'QR tidak terbaca dari foto. Coba foto lebih dekat & jelas.'}); }
+  e.target.value = '';
+};
+function absenManual(){
+  const v = $('#manualId').value.trim(); if(!v) return;
+  lastKode = ''; prosesKode(v); $('#manualId').value = ''; $('#manualId').focus();
+}
+$('#btnManual').onclick = absenManual;
+$('#manualId').addEventListener('keydown', e => { if(e.key==='Enter') absenManual(); });
+
+// ---------- RIWAYAT ----------
+function isiFilter(){
+  const sel = $('#filterRiwayat'), cur = sel.value;
+  sel.innerHTML = '<option value="">Semua siswa</option>' +
+    SISWA.map(s => `<option value="${esc(s.id)}">${esc(s.nama)} (${esc(s.id)})</option>`).join('');
+  sel.value = cur;
+}
+async function muatRiwayat(){
+  try {
+    const rows = await run('getRiwayat', $('#filterRiwayat').value, 150);
+    $('#tbRiwayat').innerHTML = rows.map(r => `<tr>
+      <td>${esc(r.waktu)}</td><td>${esc(r.nama)}<div class="hint" style="margin:0">${esc(r.id)}</div></td>
+      <td>${r.ke}</td><td>${r.sisa}</td>
+      <td><button class="btn sm danger" data-row="${r.row}" data-id="${esc(r.id)}">Batal</button></td></tr>`).join('')
+      || '<tr><td colspan="5" class="hint">Belum ada absensi.</td></tr>';
+  } catch(e){ toast(e.message); }
+}
+$('#filterRiwayat').onchange = muatRiwayat;
+$('#tbRiwayat').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if(!b) return;
+  if (!confirm('Batalkan absensi ini? Sisa pertemuan siswa akan dikembalikan 1.')) return;
+  try { await run('batalAbsen', Number(b.dataset.row), b.dataset.id); toast('Absensi dibatalkan'); muatRiwayat(); muatSiswa(); }
+  catch(err){ toast(err.message); }
+});
+</script>
+</body>
+</html>
