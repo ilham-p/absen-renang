@@ -87,6 +87,7 @@
   </header>
   <nav>
     <button data-tab="scan" class="active">📷 Absen</button>
+    <button data-tab="jadwal">📅 Jadwal</button>
     <button data-tab="siswa">👥 Siswa</button>
     <button data-tab="riwayat">🕘 Riwayat</button>
   </nav>
@@ -114,6 +115,39 @@
       </div>
     </section>
 
+    <!-- TAB JADWAL -->
+    <section id="tab-jadwal" class="hidden">
+      <div class="card">
+        <div class="row" style="align-items:center;margin-bottom:8px">
+          <h2 style="margin:0;flex:1 1 auto">Jadwal dan Konfirmasi Kehadiran</h2>
+          <input id="jTgl" type="date" style="flex:1 1 160px">
+        </div>
+        <div id="jInfo" class="hint" style="margin:0 0 8px"></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Jam</th><th>Nama</th><th>Status</th><th></th></tr></thead>
+            <tbody id="tbJadwal"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Buat Konfirmasi Kehadiran</h2>
+        <div class="row">
+          <div><label>Tanggal</label><input id="jBuatTgl" type="date"></div>
+          <div><label>Jam mulai</label><input id="jBuatJam" type="time" value="08:00"></div>
+        </div>
+        <label>Pilih siswa yang konfirmasi hadir</label>
+        <div class="row">
+          <input id="jCari" placeholder="Cari nama / ID…">
+          <select id="jProgram"></select>
+          <button class="btn sec" id="btnPilihSemua" style="flex:0 0 auto">Pilih semua yang tampil</button>
+        </div>
+        <div id="jPilih" style="max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:8px;padding:6px"></div>
+        <div class="hint" id="jPilihInfo"></div>
+        <div style="margin-top:12px"><button class="btn" id="btnSimpanJadwal">Simpan Konfirmasi</button></div>
+      </div>
+    </section>
+
     <!-- TAB SISWA -->
     <section id="tab-siswa" class="hidden">
       <div class="grid2">
@@ -121,7 +155,11 @@
           <h2>Tambah Siswa</h2>
           <label>Nama</label><input id="fNama" placeholder="Nama siswa">
           <label>No. Telepon (opsional)</label><input id="fTelp" inputmode="tel" placeholder="08xxxxxxxxxx">
-          <label>Jumlah pertemuan dalam paket</label><input id="fPaket" type="number" min="0" value="8">
+          <label>Program</label><select id="fProgram"></select>
+          <label>Frekuensi per minggu</label>
+          <select id="fFrek"><option value="1">1x per minggu</option><option value="2">2x per minggu</option></select>
+          <label>Jumlah pertemuan dalam paket</label><input id="fPaket" type="number" min="0" value="4">
+          <div class="hint" style="margin-top:4px">Otomatis 4 pertemuan per frekuensi (1x = 4, 2x = 8); bisa diubah.</div>
           <div style="margin-top:12px"><button class="btn" id="btnTambah">Simpan Siswa</button></div>
         </div>
         <div class="card">
@@ -133,10 +171,11 @@
         <div class="row" style="align-items:center;margin-bottom:8px">
           <h2 style="margin:0;flex:1 1 auto">Daftar Siswa</h2>
           <input id="cari" placeholder="Cari nama / ID…" style="flex:1 1 180px">
+          <select id="cariProgram" style="flex:1 1 160px"></select>
         </div>
         <div class="tablewrap">
           <table>
-            <thead><tr><th>ID</th><th>Nama</th><th>Terpakai</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>ID</th><th>Nama</th><th>Program</th><th>Terpakai</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr></thead>
             <tbody id="tbSiswa"></tbody>
           </table>
         </div>
@@ -173,6 +212,21 @@
       <button class="btn" id="btnUnduh">Unduh PNG</button>
       <button class="btn sec" id="btnCetak">Cetak</button>
       <button class="btn sec" id="btnTutup">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL UBAH PROGRAM -->
+<div id="modalProgram" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%">
+    <h2>Ubah Program</h2>
+    <div id="pNama" style="font-weight:600"></div>
+    <label>Program</label><select id="pProgram"></select>
+    <label>Frekuensi per minggu</label>
+    <select id="pFrek"><option value="1">1x per minggu</option><option value="2">2x per minggu</option></select>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="btnSimpanProgram">Simpan</button>
+      <button class="btn sec" id="btnBatalProgram">Batal</button>
     </div>
   </div>
 </div>
@@ -237,46 +291,54 @@ if (saved) login(saved);
 // ---------- TAB ----------
 $$('nav button').forEach(b => b.onclick = () => {
   $$('nav button').forEach(x => x.classList.toggle('active', x === b));
-  ['scan','siswa','riwayat'].forEach(t => $('#tab-'+t).classList.toggle('hidden', t !== b.dataset.tab));
+  ['scan','jadwal','siswa','riwayat'].forEach(t => $('#tab-'+t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab !== 'scan') stopKamera();
   if (b.dataset.tab === 'riwayat') muatRiwayat();
   if (b.dataset.tab === 'siswa') muatSiswa();
+  if (b.dataset.tab === 'jadwal') { muatSiswa(); muatJadwal(); }
 });
 
 // ---------- SISWA ----------
 async function muatSiswa(){
-  try { SISWA = await run('getSiswa'); renderSiswa(); isiFilter(); } catch(e){ toast(e.message); }
+  try { SISWA = await run('getSiswa'); renderSiswa(); isiFilter(); renderPilih(); } catch(e){ toast(e.message); }
 }
 function renderSiswa(){
   const q = $('#cari').value.trim().toLowerCase();
-  const list = SISWA.filter(s => !q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+  const pf = $('#cariProgram').value;
+  const list = SISWA.filter(s => (!q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) && (!pf || s.program === pf));
   $('#tbSiswa').innerHTML = list.map(s => {
     const cls = s.sisa <= 0 ? 'b-err' : (s.sisa <= 2 ? 'b-warn' : 'b-ok');
     return `<tr>
       <td>${esc(s.id)}</td>
       <td>${esc(s.nama)}<div class="hint" style="margin:0">${esc(s.telepon)}</div></td>
+      <td>${s.program ? esc(s.program) + '<div class="hint" style="margin:0">' + s.frek + 'x per minggu</div>' : '<span class="badge b-mute">Belum diatur</span>'}</td>
       <td>${s.terpakai} / ${s.total}</td>
-      <td><span class="badge ${cls}">${s.sisa}</span></td>
+      <td><span class="badge ${cls}">${s.sisa < 0 ? 'Menunggu bayar ' + (-s.sisa) : s.sisa}</span></td>
       <td><span class="badge ${s.status==='Aktif'?'b-ok':'b-mute'}">${esc(s.status)}</span></td>
       <td><div class="acts">
         <button class="btn sm" data-a="qr" data-id="${esc(s.id)}">QR</button>
         <button class="btn sm sec" data-a="paket" data-id="${esc(s.id)}">+Paket</button>
+        <button class="btn sm sec" data-a="program" data-id="${esc(s.id)}">Program</button>
         <button class="btn sm sec" data-a="status" data-id="${esc(s.id)}">${s.status==='Aktif'?'Nonaktifkan':'Aktifkan'}</button>
       </div></td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="hint">Belum ada siswa.</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="hint">Belum ada siswa.</td></tr>';
 
   const aktif = SISWA.filter(s => s.status === 'Aktif');
   $('#ringkasan').innerHTML =
     `Siswa aktif: <b>${aktif.length}</b><br>` +
+    PROGRAM.map(p => `${esc(p)}: <b>${aktif.filter(s => s.program === p).length}</b>`).join('<br>') + '<br>' +
+    `Program belum diatur: <b>${aktif.filter(s => !s.program).length}</b><br>` +
     `Paket hampir habis (≤2): <b>${aktif.filter(s=>s.sisa>0&&s.sisa<=2).length}</b><br>` +
-    `Paket habis: <b>${aktif.filter(s=>s.sisa<=0).length}</b>`;
+    `Paket habis: <b>${aktif.filter(s=>s.sisa===0).length}</b><br>` +
+    `Menunggu pembayaran (melebihi paket): <b>${aktif.filter(s=>s.sisa<0).length}</b>`;
 }
 $('#cari').oninput = renderSiswa;
 
 $('#btnTambah').onclick = async () => {
   const btn = $('#btnTambah'); btn.disabled = true;
   try {
-    const r = await run('tambahSiswa', { nama:$('#fNama').value, telepon:$('#fTelp').value, paket:$('#fPaket').value });
+    const r = await run('tambahSiswa', { nama:$('#fNama').value, telepon:$('#fTelp').value, paket:$('#fPaket').value,
+      program:$('#fProgram').value, frek:$('#fFrek').value });
     toast('Tersimpan: ' + r.id);
     $('#fNama').value=''; $('#fTelp').value='';
     await muatSiswa();
@@ -289,6 +351,7 @@ $('#tbSiswa').addEventListener('click', async e => {
   const b = e.target.closest('button'); if(!b) return;
   const s = SISWA.find(x => x.id === b.dataset.id); if(!s) return;
   if (b.dataset.a === 'qr') return bukaQR(s);
+  if (b.dataset.a === 'program') return bukaProgram(s);
   if (b.dataset.a === 'paket') {
     const j = prompt('Tambah berapa pertemuan untuk ' + s.nama + '?', '8');
     if (!j) return;
@@ -338,10 +401,12 @@ function tampilHasil(r){
   if (r.loading) { el.innerHTML = '<div class="result warn"><div class="sub">Memproses…</div></div>'; return; }
   if (r.ok) {
     el.innerHTML = `<div class="result ${r.sisa<=1?'warn':'ok'}">
-      <div class="sub">✅ Absen berhasil</div>
+      <div class="sub">✅ Absen berhasil${r.tambahan ? ' (pertemuan tambahan hari ini)' : ''}</div>
       <div class="big">${esc(r.nama)}</div>
       <div class="count">Pertemuan ke-${r.ke}</div>
-      <div class="sub">Sisa: <b>${r.sisa}</b> dari ${r.total} pertemuan</div>
+      <div class="sub">${r.sisa < 0 ? 'Melebihi paket: menunggu pembayaran <b>' + (-r.sisa) + '</b> pertemuan' : 'Sisa: <b>' + r.sisa + '</b> dari ' + r.total + ' pertemuan'}</div>
+      ${r.program ? `<div class="sub" style="opacity:.8">${esc(r.program)} · ${r.frek}x per minggu · minggu ini ke-${r.mingguKe}</div>` : ''}
+      ${r.frek && r.mingguKe > r.frek ? `<div class="sub" style="margin-top:6px">⚠️ Melebihi kuota mingguan (${r.frek}x per minggu)</div>` : ''}
       ${r.msg ? `<div class="sub" style="margin-top:6px">⚠️ ${esc(r.msg)}</div>` : ''}
     </div>`;
   } else {
@@ -350,6 +415,8 @@ function tampilHasil(r){
       <div class="sub">${r.type==='duplikat'?'⚠️':'❌'} Gagal</div>
       ${r.nama ? `<div class="big">${esc(r.nama)}</div>` : ''}
       <div class="sub">${esc(r.msg)}</div>
+      ${r.bisaGanda ? `<div style="margin-top:10px"><button class="btn" id="btnTambahan" data-id="${esc(r.id)}" data-nama="${esc(r.nama)}" data-utang="${r.utang ? 1 : 0}">Catat pertemuan tambahan (pengganti)</button></div>` : ''}
+      ${r.bisaUtang ? `<div style="margin-top:10px"><button class="btn" id="btnUtang" data-id="${esc(r.id)}" data-nama="${esc(r.nama)}">Izinkan hadir (menunggu pembayaran)</button></div>` : ''}
     </div>`;
   }
 }
@@ -397,6 +464,26 @@ function absenManual(){
   lastKode = ''; prosesKode(v); $('#manualId').value = ''; $('#manualId').focus();
 }
 $('#btnManual').onclick = absenManual;
+$('#hasil').addEventListener('click', async e => {
+  const b = e.target.closest('#btnUtang'); if (!b) return;
+  if (!confirm('Paket ' + b.dataset.nama + ' sudah habis.\nIzinkan hadir sekarang dan catat sebagai menunggu pembayaran?')) return;
+  b.disabled = true;
+  try {
+    const r = await run('absen', b.dataset.id, false, true);
+    tampilHasil(r); beep(r.ok);
+    if (r.ok) muatSiswa();
+  } catch(err){ tampilHasil({ok:false, type:'error', msg:err.message}); }
+});
+$('#hasil').addEventListener('click', async e => {
+  const b = e.target.closest('#btnTambahan'); if (!b) return;
+  if (!confirm('Catat 1 pertemuan tambahan hari ini untuk ' + b.dataset.nama + '?\nSisa pertemuan akan berkurang 1 lagi.')) return;
+  b.disabled = true;
+  try {
+    const r = await run('absen', b.dataset.id, true, b.dataset.utang === '1');
+    tampilHasil(r); beep(r.ok);
+    if (r.ok) muatSiswa();
+  } catch(err){ tampilHasil({ok:false, type:'error', msg:err.message}); }
+});
 $('#manualId').addEventListener('keydown', e => { if(e.key==='Enter') absenManual(); });
 
 // ---------- RIWAYAT ----------
@@ -410,7 +497,7 @@ async function muatRiwayat(){
   try {
     const rows = await run('getRiwayat', $('#filterRiwayat').value, 150);
     $('#tbRiwayat').innerHTML = rows.map(r => `<tr>
-      <td>${esc(r.waktu)}</td><td>${esc(r.nama)}<div class="hint" style="margin:0">${esc(r.id)}</div></td>
+      <td>${esc(r.waktu)}${r.ket ? `<div class="hint" style="margin:0">${esc(r.ket)}</div>` : ''}</td><td>${esc(r.nama)}<div class="hint" style="margin:0">${esc(r.id)}</div></td>
       <td>${r.ke}</td><td>${r.sisa}</td>
       <td><button class="btn sm danger" data-row="${r.row}" data-id="${esc(r.id)}">Batal</button></td></tr>`).join('')
       || '<tr><td colspan="5" class="hint">Belum ada absensi.</td></tr>';
@@ -423,6 +510,122 @@ $('#tbRiwayat').addEventListener('click', async e => {
   try { await run('batalAbsen', Number(b.dataset.row), b.dataset.id); toast('Absensi dibatalkan'); muatRiwayat(); muatSiswa(); }
   catch(err){ toast(err.message); }
 });
+// ---------- JADWAL & KONFIRMASI ----------
+let JADWAL = [], BATAS = 60;
+const PILIH = new Set();
+const OFFSET_WIB = '+07:00';
+
+function wibHari(tambah){ return new Date(Date.now() + 7*3600e3 + (tambah||0)*86400e3).toISOString().slice(0,10); }
+$('#jTgl').value = wibHari(0);
+$('#jBuatTgl').value = wibHari(1);
+
+function infoPilih(){ $('#jPilihInfo').textContent = PILIH.size + ' siswa dipilih'; }
+function renderPilih(){
+  const q = $('#jCari').value.trim().toLowerCase();
+  const pf = $('#jProgram').value;
+  const list = SISWA.filter(s => s.status === 'Aktif' && (!pf || s.program === pf) && (!q || s.nama.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
+  $('#jPilih').innerHTML = list.map(s =>
+    `<label style="display:flex;gap:8px;align-items:center;margin:0;padding:6px;font-size:14px;color:var(--ink)">
+       <input type="checkbox" style="width:auto" data-id="${esc(s.id)}" ${PILIH.has(s.id) ? 'checked' : ''}>
+       ${esc(s.nama)} <span class="hint" style="margin:0">${esc(s.id)} · ${esc(s.program || '-')}${s.frek ? ' ' + s.frek + 'x' : ''}</span></label>`).join('')
+    || '<div class="hint">Tidak ada siswa.</div>';
+  infoPilih();
+}
+$('#jCari').oninput = renderPilih;
+$('#jPilih').addEventListener('change', e => {
+  const c = e.target.closest('input[type=checkbox]'); if (!c) return;
+  if (c.checked) PILIH.add(c.dataset.id); else PILIH.delete(c.dataset.id);
+  infoPilih();
+});
+$('#btnPilihSemua').onclick = () => {
+  $$('#jPilih input[type=checkbox]').forEach(c => { PILIH.add(c.dataset.id); c.checked = true; });
+  infoPilih();
+};
+
+$('#btnSimpanJadwal').onclick = async () => {
+  const tgl = $('#jBuatTgl').value, jam = $('#jBuatJam').value;
+  if (!tgl || !jam) return toast('Isi tanggal dan jam mulai');
+  if (!PILIH.size) return toast('Pilih minimal 1 siswa');
+  const btn = $('#btnSimpanJadwal'); btn.disabled = true;
+  try {
+    const r = await run('tambahJadwal', tgl, jam, Array.from(PILIH));
+    toast(r.ditambah + ' siswa dikonfirmasi' + (r.dilewati ? ', ' + r.dilewati + ' sudah ada' : ''));
+    PILIH.clear(); renderPilih();
+    $('#jTgl').value = tgl; muatJadwal();
+  } catch(e){ toast(e.message); }
+  btn.disabled = false;
+};
+
+function badgeJadwal(st){
+  return st === 'Hadir' ? 'b-ok' : (st === 'Terkonfirmasi' ? 'b-mute' : (st === 'Batal (tidak dihitung)' ? 'b-warn' : 'b-err'));
+}
+async function muatJadwal(){
+  const tgl = $('#jTgl').value; if (!tgl) return;
+  try {
+    const d = await run('getJadwal', tgl);
+    JADWAL = d.rows; BATAS = d.batas;
+    const hit = st => JADWAL.filter(x => x.status === st).length;
+    $('#jInfo').textContent = JADWAL.length
+      ? `Terkonfirmasi: ${hit('Terkonfirmasi')} · Hadir: ${hit('Hadir')} · Batal tidak dihitung: ${hit('Batal (tidak dihitung)')} · Batal dihitung: ${hit('Batal (dihitung)')}. Batal tidak dihitung jika ≥ ${BATAS} menit sebelum jam mulai.`
+      : '';
+    $('#tbJadwal').innerHTML = JADWAL.map(j => `<tr>
+      <td>${esc(j.jam)}</td>
+      <td>${esc(j.nama)}<div class="hint" style="margin:0">${esc(j.id)}${j.program ? ' · ' + esc(j.program) + (j.frek ? ' ' + j.frek + 'x' : '') : ''}${j.ket ? ' · ' + esc(j.ket) : ''}</div></td>
+      <td><span class="badge ${badgeJadwal(j.status)}">${esc(j.status)}</span></td>
+      <td>${j.status === 'Terkonfirmasi' ? `<button class="btn sm danger" data-row="${j.row}">Batal</button>` : ''}</td></tr>`).join('')
+      || '<tr><td colspan="4" class="hint">Belum ada konfirmasi untuk tanggal ini.</td></tr>';
+  } catch(e){ toast(e.message); }
+}
+$('#jTgl').onchange = muatJadwal;
+$('#tbJadwal').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const j = JADWAL.find(x => String(x.row) === b.dataset.row); if (!j) return;
+  const mulai = new Date(j.tanggal + 'T' + j.jam + ':00' + OFFSET_WIB);
+  const menit = Math.round((mulai.getTime() - Date.now()) / 60000);
+  const dihitung = menit < BATAS;
+  const ket = menit >= 0 ? menit + ' menit sebelum jam mulai' : 'sudah lewat jam mulai';
+  const msg = `Batalkan kehadiran ${j.nama} (jam ${j.jam})?\n\nSaat ini ${ket}.\n` +
+    (dihitung ? 'Pembatalan ini TETAP DIHITUNG (sisa pertemuan berkurang 1).' : 'Pembatalan ini TIDAK dihitung (sisa pertemuan tetap).');
+  if (!confirm(msg)) return;
+  b.disabled = true;
+  try {
+    const r = await run('batalJadwal', j.row, j.id);
+    toast(r.dihitung ? 'Dibatalkan: tetap dihitung' : 'Dibatalkan: tidak dihitung');
+    muatJadwal(); muatSiswa();
+  } catch(err){ toast(err.message); b.disabled = false; }
+});
+// ---------- PROGRAM ----------
+const PROGRAM = ['Sekolah Renang', 'Private Khusus', 'Private Reguler'];
+function opsiProgram(semua){
+  return (semua ? '<option value="">Semua program</option>' : '') + PROGRAM.map(p => `<option>${p}</option>`).join('');
+}
+$('#fProgram').innerHTML = opsiProgram(false);
+$('#pProgram').innerHTML = opsiProgram(false);
+$('#cariProgram').innerHTML = opsiProgram(true);
+$('#jProgram').innerHTML = opsiProgram(true);
+$('#cariProgram').onchange = renderSiswa;
+$('#jProgram').onchange = renderPilih;
+// Default jumlah pertemuan mengikuti frekuensi (1x = 4, 2x = 8), tetap bisa diubah manual
+$('#fFrek').onchange = () => { $('#fPaket').value = Number($('#fFrek').value) * 4; };
+
+let programSiswa = null;
+function bukaProgram(s){
+  programSiswa = s;
+  $('#pNama').textContent = s.nama + ' (' + s.id + ')';
+  $('#pProgram').value = s.program || PROGRAM[0];
+  $('#pFrek').value = s.frek === 2 ? '2' : '1';
+  $('#modalProgram').classList.remove('hidden');
+}
+$('#btnBatalProgram').onclick = () => $('#modalProgram').classList.add('hidden');
+$('#btnSimpanProgram').onclick = async () => {
+  if (!programSiswa) return;
+  try {
+    await run('ubahProgram', programSiswa.id, $('#pProgram').value, Number($('#pFrek').value));
+    toast('Program disimpan');
+    $('#modalProgram').classList.add('hidden');
+    muatSiswa();
+  } catch(e){ toast(e.message); }
+};
 </script>
 </body>
 </html>
