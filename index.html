@@ -77,16 +77,28 @@
   .jcell.kosong{color:#b8c7cf}
   .jcell:hover{background:rgba(11,110,153,.1)}
   .jcell small{font-size:11px;font-weight:600}
+  /* Cetak jadwal: ukuran tulisan (--fs) & tinggi baris (--hrow) dihitung ulang oleh sesuaikanCetak()
+     agar tabel selalu muat 1 halaman A4 landscape, berapa pun jumlah kolom pelatih. */
+  body.cetak-jadwal{background:#fff}
+  body.cetak-jadwal #areaJadwal{position:absolute;left:0;top:0;z-index:9999;width:281mm;max-width:none;margin:0;padding:0;border:0;border-radius:0;background:#fff;font-size:var(--fs,9pt)}
+  body.cetak-jadwal .noprint{display:none!important}
+  body.cetak-jadwal #areaJadwal h2{font-size:14pt;margin:0 0 2mm}
+  body.cetak-jadwal .jhead{grid-template-columns:24mm 70mm;gap:1mm 3mm;margin-bottom:2mm;font-size:10pt}
+  body.cetak-jadwal .jhead input{border:0;padding:0;background:none;font:inherit;font-weight:600}
+  body.cetak-jadwal input[type=date]::-webkit-calendar-picker-indicator{display:none}
+  body.cetak-jadwal .tablewrap{overflow:visible}
+  body.cetak-jadwal .jgrid{table-layout:fixed;width:100%;min-width:0;font-size:var(--fs,9pt)}
+  body.cetak-jadwal .jgrid th{padding:2mm 1mm;font-size:var(--fs,9pt);overflow-wrap:anywhere}
+  body.cetak-jadwal .jgrid th.jam,body.cetak-jadwal .jgrid td.jam{position:static;width:22mm;padding:1mm;font-size:var(--fs,9pt)}
+  body.cetak-jadwal .jgrid td.istirahat{height:5mm}
+  body.cetak-jadwal .jcell{min-width:0;min-height:var(--hrow,12mm);padding:1mm;font-size:var(--fs,9pt);overflow-wrap:anywhere}
+  body.cetak-jadwal .jcell small{font-size:.85em}
+  body.cetak-jadwal .jcell.kosong{color:transparent}
   @media print{
     body.cetak-jadwal *{visibility:hidden}
     body.cetak-jadwal #areaJadwal,body.cetak-jadwal #areaJadwal *{visibility:visible}
-    body.cetak-jadwal #areaJadwal{position:absolute;left:0;top:0;width:100%;border:0;padding:0}
-    body.cetak-jadwal .noprint{display:none!important}
-    body.cetak-jadwal .jcell.kosong{color:transparent}
-    body.cetak-jadwal .jgrid th.jam,body.cetak-jadwal .jgrid td.jam{position:static}
-    body.cetak-jadwal .jhead input{border:0;padding:0;font-weight:600}
   }
-  @page{size:landscape;margin:8mm}
+  @page{size:A4 landscape;margin:8mm}
 </style>
 </head>
 <body>
@@ -771,8 +783,35 @@ $('#btnSalin').onclick = async () => {
     muatJadwal();
   } catch(err){ toast(err.message); }
 };
-$('#btnCetakJadwal').onclick = () => { document.body.classList.add('cetak-jadwal'); window.print(); };
-window.addEventListener('afterprint', () => document.body.classList.remove('cetak-jadwal'));
+// Cetak: tulisan & tabel menyesuaikan otomatis jumlah kolom pelatih agar selalu muat 1 halaman A4 (landscape)
+const A4 = { lebarMm: 281, tinggiMm: 194, jamMm: 22 };   // area cetak = A4 landscape dikurangi margin 8 mm
+function sesuaikanCetak(){
+  const area = $('#areaJadwal'), mmPx = 96 / 25.4;
+  const n = Math.max(KOLOM.length, 1);
+  const wKol = (A4.lebarMm - A4.jamMm) / n;                 // lebar tiap kolom pelatih (mm)
+  let kata = 4;                                              // kata terpanjang di jadwal (huruf)
+  JADWAL.forEach(j => String(j.nama).split(/[\s()]+/).forEach(w => { if (w.length > kata) kata = w.length; }));
+  // font dibatasi agar kata terpanjang muat selebar kolom (tidak terpotong di tengah kata), min 5pt
+  let pt = Math.max(5, Math.min(11, wKol / 2.6, (wKol - 2.5) / (kata * 0.25)));
+  let hrow = 22;                                             // baris dibuat setinggi mungkin, lalu dikecilkan sampai muat
+  for (let i = 0; i < 60; i++) {
+    area.style.setProperty('--fs', pt.toFixed(1) + 'pt');
+    area.style.setProperty('--hrow', hrow + 'mm');
+    if (area.getBoundingClientRect().height <= A4.tinggiMm * mmPx - 4) break;
+    if (hrow > 7) hrow -= 1; else if (pt > 5) pt -= 0.5; else break;
+  }
+}
+function resetCetak(){
+  const area = $('#areaJadwal');
+  ['--fs', '--hrow'].forEach(p => area.style.removeProperty(p));
+  document.body.classList.remove('cetak-jadwal');
+}
+$('#btnCetakJadwal').onclick = () => {
+  document.body.classList.add('cetak-jadwal');
+  sesuaikanCetak();
+  window.print();
+};
+window.addEventListener('afterprint', resetCetak);
 
 // ---------- PROGRAM ----------
 const PROGRAM = ['Sekolah Renang', 'Private Khusus', 'Private Reguler'];
