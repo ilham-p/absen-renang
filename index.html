@@ -77,6 +77,17 @@
   .jcell.kosong{color:#b8c7cf}
   .jcell:hover{background:rgba(11,110,153,.1)}
   .jcell small{font-size:11px;font-weight:600}
+  /* Jadwal Sekolah Renang (kelas x grup, daftar siswa per jam) */
+  .jgrid.sr{table-layout:fixed;min-width:1200px}
+  .jgrid.sr col.cj{width:100px} .jgrid.sr col.cc{width:40px}
+  .jgrid.sr td{height:25px}
+  .jgrid.sr th.kelas{color:#000;font-weight:800;letter-spacing:.6px;padding:6px 4px}
+  .jgrid.sr td.pel{background:#d9d9d9;font-weight:700;padding:0}
+  .jgrid.sr td.ct{font-size:12px;padding:0;white-space:nowrap}
+  .jgrid.sr tr.mulai td{border-top:3px solid #2b3a42}
+  .srcell{display:block;width:100%;min-height:24px;padding:2px 4px;border:0;background:none;font:inherit;color:inherit;cursor:pointer;text-align:center;overflow-wrap:break-word;line-height:1.15}
+  .srcell.kosong{color:#b8c7cf}
+  .srcell:hover{background:rgba(11,110,153,.12)}
   /* Cetak jadwal: ukuran tulisan (--fs) & tinggi baris (--hrow) dihitung ulang oleh sesuaikanCetak()
      agar tabel selalu muat 1 halaman A4 landscape, berapa pun jumlah kolom pelatih. */
   body.cetak-jadwal{background:#fff}
@@ -94,6 +105,15 @@
   body.cetak-jadwal .jcell{min-width:0;min-height:var(--hrow,12mm);padding:1mm;font-size:var(--fs,9pt);overflow-wrap:anywhere}
   body.cetak-jadwal .jcell small{font-size:.85em}
   body.cetak-jadwal .jcell.kosong{color:transparent}
+  body.cetak-jadwal .jgrid.sr{min-width:0}
+  body.cetak-jadwal .jgrid.sr col.cj{width:22mm} body.cetak-jadwal .jgrid.sr col.cc{width:7mm}
+  body.cetak-jadwal .jgrid.sr th.kelas{padding:1mm;font-size:var(--fs,8pt)}
+  body.cetak-jadwal .jgrid.sr th.jam,body.cetak-jadwal .jgrid.sr td.jam{width:auto;padding:.5mm;font-size:calc(var(--fs,8pt)*.85)}
+  body.cetak-jadwal .jgrid.sr td{height:var(--hrow,5mm)}
+  body.cetak-jadwal .jgrid.sr tr.mulai td{border-top-width:.5mm}
+  body.cetak-jadwal .srcell{min-height:var(--hrow,5mm);padding:0 .6mm;font-size:var(--fs,8pt);line-height:1.1;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:center}
+  body.cetak-jadwal .srcell.kosong{color:transparent}
+  body.cetak-jadwal .jgrid.sr td.ct{font-size:var(--fs,8pt)}
   @media print{
     body.cetak-jadwal *{visibility:hidden}
     body.cetak-jadwal #areaJadwal,body.cetak-jadwal #areaJadwal *{visibility:visible}
@@ -151,7 +171,11 @@
     <!-- TAB JADWAL -->
     <section id="tab-jadwal" class="hidden">
       <div class="card" id="areaJadwal">
-        <h2 style="text-align:center;font-size:20px;margin-bottom:12px">JADWAL TERKONFIRMASI</h2>
+        <div class="row noprint" style="margin-bottom:10px">
+          <button class="btn" id="vPrivate">Private (Khusus &amp; Reguler)</button>
+          <button class="btn sec" id="vSR">Sekolah Renang</button>
+        </div>
+        <h2 id="jJudul" style="text-align:center;font-size:20px;margin-bottom:12px">JADWAL TERKONFIRMASI PRIVATE</h2>
         <div class="jhead">
           <b>HARI</b><span id="jHari" style="font-weight:600">-</span>
           <b>TANGGAL</b><input id="jTgl" type="date">
@@ -160,11 +184,12 @@
         <div class="row noprint" style="margin:12px 0 8px">
           <button class="btn sec" id="btnPelatih">👤 Atur Pelatih</button>
           <button class="btn sec" id="btnSalin">📋 Salin dari tanggal lain</button>
+          <button class="btn sec hidden" id="btnJamLain">➕ Jam lain</button>
           <button class="btn sec" id="btnCetakJadwal">🖨️ Cetak</button>
         </div>
         <div id="jInfo" class="hint noprint" style="margin:0 0 8px"></div>
-        <div class="tablewrap"><table class="jgrid" id="tbJadwalGrid"></table></div>
-        <div class="hint noprint">Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus.</div>
+        <div class="tablewrap"><table class="jgrid" id="tbJadwalGrid"></table><table class="jgrid sr hidden" id="tbJadwalSR"></table></div>
+        <div class="hint noprint" id="jBantuan">Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus.</div>
       </div>
     </section>
 
@@ -245,7 +270,7 @@
     <div id="sInfo"></div>
     <div id="sAksi" class="row" style="margin:8px 0"></div>
     <div id="sIsi">
-      <div class="row" style="margin:6px 0">
+      <div class="row" id="sTabs" style="margin:6px 0">
         <button class="btn sm" id="sTabSiswa">Siswa</button>
         <button class="btn sm sec" id="sTabBlok">Kelas / rombongan</button>
       </div>
@@ -264,6 +289,22 @@
       </div>
     </div>
     <div style="margin-top:14px;text-align:right"><button class="btn sec" id="btnTutupSlot">Tutup</button></div>
+  </div>
+</div>
+
+<!-- MODAL PELATIH GRUP (Sekolah Renang) -->
+<div id="modalGrup" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:380px;width:100%">
+    <h2 id="gJudul" style="margin-bottom:2px"></h2>
+    <div id="gTgl" class="hint" style="margin:0"></div>
+    <label>Pelatih grup ini (boleh lebih dari satu, mis. SENDI / DESI)</label>
+    <input id="gLabel" autocomplete="off" placeholder="Contoh: SENDI">
+    <div id="gChips" class="acts" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="btnSimpanGrup">Simpan</button>
+      <button class="btn sec" id="btnKosongGrup">Kosongkan</button>
+      <button class="btn sec" id="btnBatalGrup">Batal</button>
+    </div>
   </div>
 </div>
 
@@ -637,16 +678,18 @@ async function muatJadwal(){
   } catch(e){ toast(e.message); }
 }
 
-function renderJadwal(){
+function renderJadwal(){ if (VIEW === 'sr') renderSR(); else renderPrivate(); }
+function renderPrivate(){
+  const JP = JADWAL.filter(j => !j.kelas);   // Sekolah Renang punya tabel sendiri
   const kolom = PELATIH.slice();
-  JADWAL.forEach(j => { if (kolom.indexOf(j.pelatih) < 0) kolom.push(j.pelatih); });
+  JP.forEach(j => { if (kolom.indexOf(j.pelatih) < 0) kolom.push(j.pelatih); });
   KOLOM = kolom; PETA = {};
-  JADWAL.forEach(j => {
+  JP.forEach(j => {
     const k = j.jam + '|' + kolom.indexOf(j.pelatih), cur = PETA[k];
     if (!cur || (batalJ(cur) && !batalJ(j))) PETA[k] = j;
   });
   const jams = JAM_DEFAULT.slice();
-  JADWAL.forEach(j => { if (jams.indexOf(j.jam) < 0) jams.push(j.jam); });
+  JP.forEach(j => { if (jams.indexOf(j.jam) < 0) jams.push(j.jam); });
   jams.sort();
   const nm = p => p === '' ? '(tanpa pelatih)' : p;
 
@@ -670,7 +713,7 @@ function renderJadwal(){
   }
   $('#tbJadwalGrid').innerHTML = h + '</tbody>';
 
-  const sis = JADWAL.filter(j => j.status !== 'Blok');
+  const sis = JP.filter(j => j.status !== 'Blok');
   const hit = st => sis.filter(x => x.status === st).length;
   $('#jInfo').textContent = sis.length
     ? `Terkonfirmasi: ${hit('Terkonfirmasi')} · Hadir: ${hit('Hadir')} · Batal tidak dihitung: ${hit('Batal (tidak dihitung)')} · Batal dihitung: ${hit('Batal (dihitung)')}. Batal tidak dihitung jika ≥ ${BATAS} menit sebelum jam mulai.`
@@ -698,7 +741,7 @@ $('#bChips').addEventListener('click', e => { const b = e.target.closest('button
 
 function bukaSlot(){
   const s = slotAktif, e = s.entry;
-  $('#sJudul').textContent = labelJam(s.jam) + ' · ' + (s.pel || 'tanpa pelatih');
+  $('#sJudul').textContent = s.mode === 'sr' ? labelJam(s.jam) + ' · Kelas ' + s.kelas + ' · grup ' + s.grup : labelJam(s.jam) + ' · ' + (s.pel || 'tanpa pelatih');
   $('#sTgl').textContent = tglPanjang($('#jTgl').value);
   let info = '', aksi = '';
   if (e) {
@@ -707,9 +750,10 @@ function bukaSlot(){
     else if (e.status === 'Blok') aksi = '<button class="btn sm sec" id="sHapus">Hapus kotak</button>';
   }
   $('#sInfo').innerHTML = info; $('#sAksi').innerHTML = aksi;
-  const bolehIsi = !e || batalJ(e);
+  const bolehIsi = s.mode === 'sr' ? !e : (!e || batalJ(e));
+  $('#sTabs').classList.toggle('hidden', s.mode === 'sr');
   $('#sIsi').classList.toggle('hidden', !bolehIsi);
-  if (bolehIsi) { $('#jCari').value = ''; $('#jProgram').value = ''; $('#bLabel').value = ''; tabSlot('siswa'); renderPilih(); }
+  if (bolehIsi) { $('#jCari').value = ''; setOpsiPilih(s.mode === 'sr' ? 'sr' : 'private'); $('#bLabel').value = ''; tabSlot('siswa'); renderPilih(); }
   $('#modalSlot').classList.remove('hidden');
 }
 $('#btnTutupSlot').onclick = () => $('#modalSlot').classList.add('hidden');
@@ -718,7 +762,8 @@ $('#btnTutupSlot').onclick = () => $('#modalSlot').classList.add('hidden');
 function renderPilih(){
   const box = $('#jPilih'); if (!box) return;
   const q = $('#jCari').value.trim().toLowerCase(), pf = $('#jProgram').value;
-  const semua = SISWA.filter(s => s.status === 'Aktif' && (!pf || s.program === pf) && (!q || s.nama.toLowerCase().includes(q) || (s.panggilan || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
+  const okProg = s => pf === 'PRIVATE' ? (s.program === 'Private Khusus' || s.program === 'Private Reguler') : (!pf || s.program === pf);
+  const semua = SISWA.filter(s => s.status === 'Aktif' && okProg(s) && (!q || s.nama.toLowerCase().includes(q) || (s.panggilan || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)));
   const list = semua.slice(0, 60);
   box.innerHTML = list.map(s =>
     `<button class="btn sec" style="display:block;width:100%;text-align:left;margin:3px 0;padding:7px 10px;font-size:14px" data-id="${esc(s.id)}">${esc(s.panggilan || s.nama)}${s.panggilan ? ' <span class="hint" style="margin:0">(' + esc(s.nama) + ')</span>' : ''} <span class="hint" style="margin:0">${esc(s.id)} · ${esc(s.program || '-')}${s.frek ? ' ' + s.frek + 'x' : ''}${s.sisa <= 0 ? ' · paket habis' : ''}</span></button>`).join('')
@@ -731,7 +776,8 @@ $('#jPilih').addEventListener('click', async e => {
   const b = e.target.closest('button[data-id]'); if (!b || !slotAktif) return;
   b.disabled = true;
   try {
-    await run('isiSlot', $('#jTgl').value, slotAktif.jam, slotAktif.pel, 'siswa', b.dataset.id);
+    if (slotAktif.mode === 'sr') await run('isiGrupSR', $('#jTgl').value, slotAktif.jam, slotAktif.kelas, slotAktif.grup, 'siswa', b.dataset.id);
+    else await run('isiSlot', $('#jTgl').value, slotAktif.jam, slotAktif.pel, 'siswa', b.dataset.id);
     toast('Siswa dijadwalkan');
     $('#modalSlot').classList.add('hidden'); muatJadwal();
   } catch(err){ toast(err.message); b.disabled = false; }
@@ -784,30 +830,196 @@ $('#btnSimpanPelatih').onclick = async () => {
 };
 $('#btnSalin').onclick = async () => {
   const ke = $('#jTgl').value; if (!ke) return;
-  const dari = prompt('Salin jadwal ke ' + tglPanjang(ke) + '.\nSalin dari tanggal (format tttt-bb-hh):', geserTanggal(ke, -7));
+  const dari = prompt('Salin jadwal ' + (VIEW === 'sr' ? 'Sekolah Renang' : 'private') + ' ke ' + tglPanjang(ke) + '.\nSalin dari tanggal (format tttt-bb-hh):', geserTanggal(ke, -7));
   if (!dari) return;
   try {
-    const r = await run('salinJadwal', dari.trim(), ke);
+    const r = await run('salinJadwal', dari.trim(), ke, VIEW === 'sr' ? 'sr' : 'private');
     toast(r.ditambah + ' kotak disalin' + (r.dilewati ? ', ' + r.dilewati + ' dilewati' : '') + '. Siswa kembali berstatus terkonfirmasi.');
     muatJadwal();
   } catch(err){ toast(err.message); }
 };
-// Cetak: tulisan & tabel menyesuaikan otomatis jumlah kolom pelatih agar selalu muat 1 halaman A4 (landscape)
+// ---------- JADWAL SEKOLAH RENANG (kelas x grup pelatih per jam) ----------
+let VIEW = 'private';
+try { if (localStorage.getItem('jadwalView') === 'sr') VIEW = 'sr'; } catch(e){}
+const KELAS = ['NEMO','SALMON','PARI','HIU'];
+const WARNA_KELAS = { NEMO:'#ff0000', SALMON:'#ffc000', PARI:'#92d050', HIU:'#00b0f0' };
+// Jam kelas Sekolah Renang per hari (0 = Minggu ... 6 = Sabtu)
+const JAM_SR = {
+  1: ['09:00','14:00','15:00','16:00'],
+  2: ['15:00','16:00'],
+  3: ['15:00','16:00'],
+  4: ['09:00','14:00','15:00','16:00'],
+  5: ['08:00','15:00','16:00'],
+  6: ['08:00','10:00','14:00','16:00'],
+  0: ['08:00','10:00','11:00','14:00']
+};
+const EXTRA_SR = {};   // jam tambahan yang dibuka manual, per tanggal
+function hariKe(tgl){ return new Date(tgl + 'T12:00:00Z').getUTCDay(); }
+
+function selSR(e){
+  let gaya = 'background:#fff6e5', nama = esc(tampil(e)), hit = '1';
+  if (e.status === 'Hadir') { gaya = 'background:#e8f8ee'; nama = '✓ ' + nama; }
+  else if (e.status === 'Batal (tidak dihitung)') { gaya = 'background:#fff4e0;color:#b45309'; hit = 'cuti'; }
+  else if (e.status === 'Batal (dihitung)') { gaya = 'background:#fde8e8;color:#b91c1c'; nama = '<s>' + nama + '</s>'; }
+  return { gaya: gaya, nama: nama, hit: hit };
+}
+
+function renderSR(){
+  const tgl = $('#jTgl').value;
+  const rows = JADWAL.filter(j => j.kelas);
+  const jams = (JAM_SR[hariKe(tgl)] || []).slice();
+  (EXTRA_SR[tgl] || []).forEach(j => { if (jams.indexOf(j) < 0) jams.push(j); });
+  rows.forEach(j => { if (jams.indexOf(j.jam) < 0) jams.push(j.jam); });
+  jams.sort();
+
+  const idx = {};
+  rows.forEach(j => {
+    const k = j.jam + '|' + j.kelas + '|' + j.grup;
+    const o = idx[k] || (idx[k] = { head: null, siswa: [] });
+    if (j.status === 'Grup') o.head = j; else o.siswa.push(j);
+  });
+
+  let h = '<colgroup><col class="cj">' + '<col><col class="cc">'.repeat(KELAS.length * 2) + '</colgroup>';
+  h += '<thead><tr><th class="jam">WAKTU</th>' + KELAS.map(k => `<th class="kelas" colspan="4" style="background:${WARNA_KELAS[k]}">KELAS ${k}</th>`).join('') + '</tr></thead><tbody>';
+
+  if (!jams.length) {
+    h += '<tr><td class="hint" colspan="9" style="padding:16px">Tidak ada jam kelas pada hari ini. Klik "Jam lain" untuk menambah.</td></tr>';
+  }
+  jams.forEach(jam => {
+    const grp = [];
+    let maxN = 0;
+    KELAS.forEach(k => [1, 2].forEach(g => {
+      const o = idx[jam + '|' + k + '|' + g] || { head: null, siswa: [] };
+      o.siswa.sort((a, b) => a.row - b.row);
+      grp.push({ kelas: k, grup: g, head: o.head, siswa: o.siswa });
+      if (o.siswa.length > maxN) maxN = o.siswa.length;
+    }));
+    const R = Math.max(5, maxN + 1);   // minimal 5 baris, selalu ada 1 baris kosong untuk tombol +
+    h += `<tr class="mulai"><td class="jam" rowspan="${R + 1}">${esc(labelJam(jam))}</td>` + grp.map(o =>
+      `<td class="pel" colspan="2"><button class="srcell srhead${o.head ? '' : ' kosong'}" data-jam="${esc(jam)}" data-k="${o.kelas}" data-g="${o.grup}">${o.head ? esc(o.head.nama) : '+'}</button></td>`).join('') + '</tr>';
+    for (let i = 0; i < R; i++) {
+      h += '<tr>';
+      grp.forEach(o => {
+        const e = o.siswa[i];
+        if (e) {
+          const s = selSR(e);
+          h += `<td style="${s.gaya}"><button class="srcell" data-row="${e.row}">${s.nama}</button></td><td class="ct" style="${s.gaya}">${s.hit}</td>`;
+        } else if (i === o.siswa.length) {
+          h += `<td><button class="srcell kosong" data-jam="${esc(jam)}" data-k="${o.kelas}" data-g="${o.grup}">+</button></td><td class="ct"></td>`;
+        } else {
+          h += '<td></td><td class="ct"></td>';
+        }
+      });
+      h += '</tr>';
+    }
+  });
+  $('#tbJadwalSR').innerHTML = h + '</tbody>';
+
+  const sis = rows.filter(j => j.status !== 'Grup');
+  const hit = st => sis.filter(x => x.status === st).length;
+  $('#jInfo').textContent = sis.length
+    ? `Siswa: ${sis.length} · Terkonfirmasi: ${hit('Terkonfirmasi')} · Hadir: ${hit('Hadir')} · Cuti (batal tidak dihitung): ${hit('Batal (tidak dihitung)')} · Batal dihitung: ${hit('Batal (dihitung)')}. Batal tidak dihitung jika ≥ ${BATAS} menit sebelum jam mulai.`
+    : 'Belum ada siswa terkonfirmasi pada tanggal ini.';
+}
+
+$('#tbJadwalSR').addEventListener('click', e => {
+  const b = e.target.closest('button.srcell'); if (!b) return;
+  if (b.classList.contains('srhead')) return bukaGrup({ jam: b.dataset.jam, kelas: b.dataset.k, grup: Number(b.dataset.g) });
+  if (b.dataset.row) {
+    const en = JADWAL.find(x => String(x.row) === b.dataset.row); if (!en) return;
+    slotAktif = { mode: 'sr', jam: en.jam, kelas: en.kelas, grup: en.grup, entry: en };
+  } else {
+    slotAktif = { mode: 'sr', jam: b.dataset.jam, kelas: b.dataset.k, grup: Number(b.dataset.g), entry: null };
+  }
+  bukaSlot();
+});
+
+// ----- label pelatih tiap grup -----
+let grupAktif = null;
+function bukaGrup(g){
+  grupAktif = g;
+  const ada = JADWAL.find(j => j.status === 'Grup' && j.jam === g.jam && j.kelas === g.kelas && j.grup === g.grup);
+  $('#gJudul').textContent = labelJam(g.jam) + ' · Kelas ' + g.kelas + ' · grup ' + g.grup;
+  $('#gTgl').textContent = tglPanjang($('#jTgl').value);
+  $('#gLabel').value = ada ? ada.nama : '';
+  $('#gChips').innerHTML = PELATIH.map(p => `<button class="btn sm sec" data-p="${esc(p)}">${esc(p)}</button>`).join('');
+  $('#modalGrup').classList.remove('hidden');
+  setTimeout(() => $('#gLabel').focus(), 50);
+}
+$('#gChips').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const inp = $('#gLabel'), v = inp.value.trim().toUpperCase(), p = b.dataset.p.toUpperCase();
+  if (!v) inp.value = p; else if (v.split(' / ').indexOf(p) < 0) inp.value = v + ' / ' + p;
+});
+async function simpanGrup(kosong){
+  if (!grupAktif) return;
+  try {
+    await run('isiGrupSR', $('#jTgl').value, grupAktif.jam, grupAktif.kelas, grupAktif.grup, 'label', kosong ? '' : $('#gLabel').value);
+    $('#modalGrup').classList.add('hidden'); muatJadwal();
+  } catch(err){ toast(err.message); }
+}
+$('#btnSimpanGrup').onclick = () => simpanGrup(false);
+$('#btnKosongGrup').onclick = () => simpanGrup(true);
+$('#btnBatalGrup').onclick = () => $('#modalGrup').classList.add('hidden');
+$('#gLabel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); simpanGrup(false); } });
+
+// ----- jam tambahan -----
+$('#btnJamLain').onclick = () => {
+  const tgl = $('#jTgl').value; if (!tgl) return;
+  const v = prompt('Tambah jam mulai (format JJ:MM, contoh 13:00):', '13:00'); if (!v) return;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  if (!m) return toast('Format jam tidak valid');
+  const jam = String(m[1]).padStart(2, '0') + ':' + m[2];
+  const arr = EXTRA_SR[tgl] || (EXTRA_SR[tgl] = []);
+  if (arr.indexOf(jam) < 0) arr.push(jam);
+  renderSR();
+};
+
+// ----- ganti tampilan Private / Sekolah Renang -----
+function terapkanView(){
+  const sr = VIEW === 'sr';
+  $('#tbJadwalGrid').classList.toggle('hidden', sr);
+  $('#tbJadwalSR').classList.toggle('hidden', !sr);
+  $('#vPrivate').classList.toggle('sec', sr);
+  $('#vSR').classList.toggle('sec', !sr);
+  $('#btnJamLain').classList.toggle('hidden', !sr);
+  $('#jJudul').textContent = sr ? 'JADWAL TERKONFIRMASI SEKOLAH RENANG' : 'JADWAL TERKONFIRMASI PRIVATE';
+  $('#jBantuan').innerHTML = sr
+    ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil: <b>1</b> = dihitung 1 pertemuan, <b>cuti</b> = batal tidak dihitung.'
+    : 'Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus.';
+}
+function pilihView(v){
+  VIEW = v;
+  try { localStorage.setItem('jadwalView', v); } catch(e){}
+  terapkanView(); renderJadwal();
+}
+$('#vPrivate').onclick = () => pilihView('private');
+$('#vSR').onclick = () => pilihView('sr');
+terapkanView();
+
+// Cetak: tulisan & tabel menyesuaikan otomatis jumlah kolom / baris agar selalu muat 1 halaman A4 (landscape)
 const A4 = { lebarMm: 281, tinggiMm: 194, jamMm: 22 };   // area cetak = A4 landscape dikurangi margin 8 mm
 function sesuaikanCetak(){
-  const area = $('#areaJadwal'), mmPx = 96 / 25.4;
-  const n = Math.max(KOLOM.length, 1);
-  const wKol = (A4.lebarMm - A4.jamMm) / n;                 // lebar tiap kolom pelatih (mm)
+  const area = $('#areaJadwal'), mmPx = 96 / 25.4, sr = VIEW === 'sr';
+  const rows = JADWAL.filter(j => sr ? !!j.kelas : !j.kelas);
   let kata = 4;                                              // kata terpanjang di jadwal (huruf)
-  JADWAL.forEach(j => String(j.status === 'Blok' ? j.nama : tampil(j)).split(/[\s()]+/).forEach(w => { if (w.length > kata) kata = w.length; }));
-  // font dibatasi agar kata terpanjang muat selebar kolom (tidak terpotong di tengah kata), min 5pt
-  let pt = Math.max(5, Math.min(11, wKol / 2.6, (wKol - 2.5) / (kata * 0.25)));
-  let hrow = 22;                                             // baris dibuat setinggi mungkin, lalu dikecilkan sampai muat
-  for (let i = 0; i < 60; i++) {
+  rows.forEach(j => String(j.status === 'Blok' || j.status === 'Grup' ? j.nama : tampil(j)).split(/[\s()]+/).forEach(w => { if (w.length > kata) kata = w.length; }));
+  let pt, hrow, hrowMin, langkah;
+  if (sr) {
+    const wKol = (A4.lebarMm - 22 - KELAS.length * 2 * 7) / (KELAS.length * 2);   // lebar kolom nama tiap grup (mm)
+    pt = Math.max(5, Math.min(10, (wKol - 2.5) / (kata * 0.25)));
+    hrow = 8; hrowMin = 3.6; langkah = 0.4;
+  } else {
+    const wKol = (A4.lebarMm - A4.jamMm) / Math.max(KOLOM.length, 1);              // lebar tiap kolom pelatih (mm)
+    // font dibatasi agar kata terpanjang muat selebar kolom (tidak terpotong di tengah kata), min 5pt
+    pt = Math.max(5, Math.min(11, wKol / 2.6, (wKol - 2.5) / (kata * 0.25)));
+    hrow = 22; hrowMin = 7; langkah = 1;                      // baris dibuat setinggi mungkin, lalu dikecilkan sampai muat
+  }
+  for (let i = 0; i < 80; i++) {
     area.style.setProperty('--fs', pt.toFixed(1) + 'pt');
-    area.style.setProperty('--hrow', hrow + 'mm');
+    area.style.setProperty('--hrow', hrow.toFixed(1) + 'mm');
     if (area.getBoundingClientRect().height <= A4.tinggiMm * mmPx - 4) break;
-    if (hrow > 7) hrow -= 1; else if (pt > 5) pt -= 0.5; else break;
+    if (hrow > hrowMin + 0.01) hrow -= langkah; else if (pt > 5) pt -= 0.5; else break;
   }
 }
 function resetCetak(){
@@ -830,7 +1042,14 @@ function opsiProgram(semua){
 $('#fProgram').innerHTML = opsiProgram(false);
 $('#pProgram').innerHTML = opsiProgram(false);
 $('#cariProgram').innerHTML = opsiProgram(true);
-$('#jProgram').innerHTML = opsiProgram(true);
+// Pilihan program di daftar siswa jadwal: Private -> siswa private saja; Sekolah Renang -> siswa Sekolah Renang
+function setOpsiPilih(mode){
+  const sel = $('#jProgram');
+  const prog = PROGRAM.map(p => `<option>${p}</option>`).join('');
+  if (mode === 'sr') { sel.innerHTML = '<option value="">Semua program</option>' + prog; sel.value = 'Sekolah Renang'; }
+  else { sel.innerHTML = '<option value="PRIVATE">Private (khusus + reguler)</option><option value="">Semua program</option>' + prog; sel.value = 'PRIVATE'; }
+}
+setOpsiPilih('private');
 $('#cariProgram').onchange = renderSiswa;
 $('#jProgram').onchange = renderPilih;
 // Default jumlah pertemuan mengikuti frekuensi (1x = 4, 2x = 8), tetap bisa diubah manual
