@@ -187,6 +187,7 @@
           <button class="btn sec" id="btnPelatih">👤 Atur Pelatih</button>
           <button class="btn sec" id="btnSalin">📋 Salin dari tanggal lain</button>
           <button class="btn sec hidden" id="btnJamLain">➕ Jam lain</button>
+          <button class="btn sec hidden" id="btnAturJam">⏰ Atur jam kelas</button>
           <button class="btn sec" id="btnCetakJadwal">🖨️ Cetak</button>
         </div>
         <div id="jInfo" class="hint noprint" style="margin:0 0 8px"></div>
@@ -324,6 +325,17 @@
 </div>
 
 <!-- MODAL ATUR PELATIH -->
+<div id="modalJam" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:90vh;overflow:auto">
+    <h2 style="margin-bottom:2px">Jam kelas Sekolah Renang</h2>
+    <div class="hint" style="margin:0 0 6px">Isi jam mulai tiap hari, pisahkan dengan koma. Contoh: 09:00, 14:00, 15:00. Jam yang dihapus tidak tampil lagi di semua tanggal; jam yang sudah berisi murid pada tanggal tertentu tetap tampil sampai muridnya dihapus.</div>
+    <div id="jamForm"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="btnSimpanJam">Simpan</button>
+      <button class="btn sec" id="btnTutupJam">Batal</button>
+    </div>
+  </div>
+</div>
 <div id="modalPelatih" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
   <div style="background:#fff;border-radius:16px;padding:18px;max-width:380px;width:100%">
     <h2>Atur Pelatih / Terapis</h2>
@@ -357,7 +369,7 @@
 // =====================================================================
 // WAJIB DIISI: tempel URL Web App Apps Script Anda (yang berakhiran /exec)
 // =====================================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbxoDoMWXlv4mQOUzPt9WsMJAioG4vogDQwCpkGbWPAP53XBj5o3jhAoZepNEMg6rX5E/exec';
+const API_URL = 'GANTI_DENGAN_URL_WEB_APP_ANDA';
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
@@ -689,6 +701,7 @@ async function muatJadwal(){
   try {
     const d = await run('getJadwal', tgl);
     JADWAL = d.rows; BATAS = d.batas; PELATIH = d.pelatih || [];
+    if (d.jamSR) JAM_SR = d.jamSR;   // jam kelas hasil pengaturan admin
     renderJadwal();
   } catch(e){ toast(e.message); }
 }
@@ -936,7 +949,7 @@ try { if (localStorage.getItem('jadwalView') === 'sr') VIEW = 'sr'; } catch(e){}
 const KELAS = ['NEMO','SALMON','PARI','HIU'];
 const WARNA_KELAS = { NEMO:'#ff0000', SALMON:'#ffc000', PARI:'#92d050', HIU:'#00b0f0' };
 // Jam kelas Sekolah Renang per hari (0 = Minggu ... 6 = Sabtu)
-const JAM_SR = {
+let JAM_SR = {
   1: ['09:00','14:00','15:00','16:00'],
   2: ['15:00','16:00'],
   3: ['15:00','16:00'],
@@ -1055,6 +1068,29 @@ $('#btnKosongGrup').onclick = () => simpanGrup(true);
 $('#btnBatalGrup').onclick = () => $('#modalGrup').classList.add('hidden');
 $('#gLabel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); simpanGrup(false); } });
 
+// ----- atur jam kelas Sekolah Renang (tersimpan di server, berlaku untuk semua admin) -----
+const URUT_HARI = [[1,'Senin'],[2,'Selasa'],[3,'Rabu'],[4,'Kamis'],[5,'Jumat'],[6,'Sabtu'],[0,'Minggu']];
+$('#btnAturJam').onclick = () => {
+  $('#jamForm').innerHTML = URUT_HARI.map(([k, n]) =>
+    `<label style="margin-top:8px">${n}</label><input data-h="${k}" autocomplete="off" value="${esc((JAM_SR[k] || []).join(', '))}" placeholder="kosong = tidak ada kelas">`).join('');
+  $('#modalJam').classList.remove('hidden');
+};
+$('#btnTutupJam').onclick = () => $('#modalJam').classList.add('hidden');
+$('#btnSimpanJam').onclick = async () => {
+  const peta = {};
+  for (const inp of document.querySelectorAll('#jamForm input')) {
+    const arr = inp.value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+    for (const x of arr) if (!/^\d{1,2}:\d{2}$/.test(x)) return toast('Jam tidak valid: ' + x + ' (format JJ:MM)');
+    peta[inp.dataset.h] = arr;
+  }
+  const b = $('#btnSimpanJam'); b.disabled = true;
+  try {
+    JAM_SR = await run('simpanJamSR', peta);
+    $('#modalJam').classList.add('hidden'); toast('Jam kelas disimpan'); renderSR();
+  } catch(e){ toast(e.message); }
+  b.disabled = false;
+};
+
 // ----- jam tambahan -----
 $('#btnJamLain').onclick = () => {
   const tgl = $('#jTgl').value; if (!tgl) return;
@@ -1075,6 +1111,7 @@ function terapkanView(){
   $('#vPrivate').classList.toggle('sec', sr);
   $('#vSR').classList.toggle('sec', !sr);
   $('#btnJamLain').classList.toggle('hidden', !sr);
+  $('#btnAturJam').classList.toggle('hidden', !sr);
   $('#jJudul').textContent = sr ? 'JADWAL TERKONFIRMASI SEKOLAH RENANG' : 'JADWAL TERKONFIRMASI PRIVATE';
   $('#jBantuan').innerHTML = sr
     ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil di sebelah nama dikosongkan untuk paraf absen manual.'
