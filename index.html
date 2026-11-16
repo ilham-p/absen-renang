@@ -679,8 +679,34 @@ async function muatJadwal(){
 }
 
 function renderJadwal(){ if (VIEW === 'sr') renderSR(); else renderPrivate(); }
+// Pelatih yang mengajar Sekolah Renang: grup berlabel pelatih DAN ada siswa yang tidak batal.
+// Hasil: { 'jam|NAMA PELATIH': [{kelas, grup, label, n}] } -> di jadwal private kotaknya otomatis bertulis "SR".
+function petaSR(){
+  const m = {}, jml = {};
+  JADWAL.forEach(j => {
+    if (!j.kelas || j.status === 'Grup' || batalJ(j)) return;
+    const k = j.jam + '|' + j.kelas + '|' + j.grup;
+    jml[k] = (jml[k] || 0) + 1;
+  });
+  JADWAL.forEach(j => {
+    if (!j.kelas || j.status !== 'Grup') return;
+    const n = jml[j.jam + '|' + j.kelas + '|' + j.grup]; if (!n) return;
+    String(j.nama).split(/[\/,&]/).map(x => x.trim().toUpperCase()).filter(Boolean).forEach(p => {
+      (m[j.jam + '|' + p] = m[j.jam + '|' + p] || []).push({ kelas: j.kelas, grup: j.grup, label: j.nama, n: n });
+    });
+  });
+  return m;
+}
+function srBentrok(e, auto){ return !!(auto && e && !batalJ(e) && !(e.status === 'Blok' && /^SR/i.test(e.nama))); }
+function infoSR(list){
+  return '<div style="padding:8px 10px;border-radius:10px;margin:10px 0 0;background:#d9d2e9"><b>Mengajar Sekolah Renang</b>' +
+    list.map(x => `<div class="hint" style="margin:2px 0 0;color:inherit">Kelas ${esc(x.kelas)} · grup ${x.grup} (${esc(x.label)}) · ${x.n} siswa</div>`).join('') +
+    '<div class="hint" style="margin:6px 0 0">Terisi otomatis dari jadwal Sekolah Renang. Untuk mengubahnya, buka tampilan Sekolah Renang.</div></div>';
+}
+
 function renderPrivate(){
   const JP = JADWAL.filter(j => !j.kelas);   // Sekolah Renang punya tabel sendiri
+  const SR = petaSR();
   const kolom = PELATIH.slice();
   JP.forEach(j => { if (kolom.indexOf(j.pelatih) < 0) kolom.push(j.pelatih); });
   KOLOM = kolom; PETA = {};
@@ -690,6 +716,7 @@ function renderPrivate(){
   });
   const jams = JAM_DEFAULT.slice();
   JP.forEach(j => { if (jams.indexOf(j.jam) < 0) jams.push(j.jam); });
+  Object.keys(SR).forEach(k => { const jm = k.split('|')[0]; if (jams.indexOf(jm) < 0) jams.push(jm); });
   jams.sort();
   const nm = p => p === '' ? '(tanpa pelatih)' : p;
 
@@ -706,7 +733,13 @@ function renderPrivate(){
       h += `<tr><td class="jam">${esc(labelJam(jam))}</td>`;
       kolom.forEach((p, c) => {
         const e = PETA[jam + '|' + c];
-        h += `<td style="${e ? gayaEntry(e) : ''}"><button class="jcell${e ? '' : ' kosong'}" data-jam="${esc(jam)}" data-c="${c}">${e ? isiEntry(e) : '+'}</button></td>`;
+        const auto = SR[jam + '|' + String(p).toUpperCase()];
+        if (auto && (!e || batalJ(e))) {      // pelatih mengajar Sekolah Renang pada jam ini
+          h += `<td style="background:#d9d2e9;font-weight:600"><button class="jcell" data-jam="${esc(jam)}" data-c="${c}" data-auto="1" title="Mengajar Sekolah Renang">SR</button></td>`;
+          return;
+        }
+        const bentrok = srBentrok(e, auto);
+        h += `<td style="${e ? gayaEntry(e) : ''}"><button class="jcell${e ? '' : ' kosong'}" data-jam="${esc(jam)}" data-c="${c}">${e ? isiEntry(e) + (bentrok ? '<small style="display:block;color:#b91c1c">⚠ juga mengajar SR</small>' : '') : '+'}</button></td>`;
       });
       h += '</tr>';
     });
@@ -718,6 +751,12 @@ function renderPrivate(){
   $('#jInfo').textContent = sis.length
     ? `Terkonfirmasi: ${hit('Terkonfirmasi')} · Hadir: ${hit('Hadir')} · Batal tidak dihitung: ${hit('Batal (tidak dihitung)')} · Batal dihitung: ${hit('Batal (dihitung)')}. Batal tidak dihitung jika ≥ ${BATAS} menit sebelum jam mulai.`
     : 'Belum ada siswa terkonfirmasi pada tanggal ini.';
+  // Pelatih yang mengajar Sekolah Renang tetapi belum punya kolom di jadwal private
+  const up = kolom.map(x => String(x).toUpperCase()), hilang = [];
+  Object.keys(SR).forEach(k => { const pl = k.split('|')[1]; if (up.indexOf(pl) < 0 && hilang.indexOf(pl) < 0) hilang.push(pl); });
+  if (hilang.length) $('#jInfo').textContent += ' · Pelatih Sekolah Renang yang belum punya kolom: ' + hilang.join(', ') + ' (tambahkan lewat Atur Pelatih agar tertulis SR).';
+  const adaBentrok = JP.some(j => !batalJ(j) && srBentrok(j, SR[j.jam + '|' + String(j.pelatih).toUpperCase()]));
+  if (adaBentrok) $('#jInfo').textContent += ' · ⚠ Ada pelatih yang jadwal private-nya bentrok dengan Sekolah Renang (ditandai merah).';
 }
 $('#jTgl').onchange = muatJadwal;
 
@@ -725,7 +764,8 @@ $('#jTgl').onchange = muatJadwal;
 $('#tbJadwalGrid').addEventListener('click', e => {
   const b = e.target.closest('button.jcell'); if (!b) return;
   const c = Number(b.dataset.c);
-  slotAktif = { jam: b.dataset.jam, pel: KOLOM[c], entry: PETA[b.dataset.jam + '|' + c] || null };
+  if (b.dataset.auto) slotAktif = { mode: 'auto', jam: b.dataset.jam, pel: KOLOM[c], entry: null, auto: petaSR()[b.dataset.jam + '|' + String(KOLOM[c]).toUpperCase()] || [] };
+  else slotAktif = { jam: b.dataset.jam, pel: KOLOM[c], entry: PETA[b.dataset.jam + '|' + c] || null };
   bukaSlot();
 });
 function tabSlot(t){
@@ -743,11 +783,18 @@ function bukaSlot(){
   const s = slotAktif, e = s.entry;
   $('#sJudul').textContent = s.mode === 'sr' ? labelJam(s.jam) + ' · Kelas ' + s.kelas + ' · grup ' + s.grup : labelJam(s.jam) + ' · ' + (s.pel || 'tanpa pelatih');
   $('#sTgl').textContent = tglPanjang($('#jTgl').value);
+  if (s.mode === 'auto') {     // kotak "SR" otomatis: hanya info, tidak bisa diisi dari sini
+    $('#sInfo').innerHTML = infoSR(s.auto); $('#sAksi').innerHTML = '';
+    $('#sIsi').classList.add('hidden'); $('#modalSlot').classList.remove('hidden');
+    return;
+  }
   let info = '', aksi = '';
   if (e) {
     info = `<div style="padding:8px 10px;border-radius:10px;margin:10px 0 0;${gayaEntry(e) || 'background:#f2f7fa'}"><b>${esc(tampil(e))}</b>${e.id ? ' <span class="hint" style="margin:0">' + esc(e.id) + (tampil(e) !== e.nama ? ' · ' + esc(e.nama) : '') + '</span>' : ''}<div class="hint" style="margin:2px 0 0">${esc(e.status)}${e.ket ? ' · ' + esc(e.ket) : ''}</div></div>`;
     if (e.status === 'Terkonfirmasi') aksi = '<button class="btn sm danger" id="sBatal">Batalkan kehadiran</button><button class="btn sm sec" id="sHapus">Hapus (salah input)</button>';
     else if (e.status === 'Blok') aksi = '<button class="btn sm sec" id="sHapus">Hapus kotak</button>';
+    const auto = s.mode === 'sr' ? null : petaSR()[s.jam + '|' + String(s.pel || '').toUpperCase()];
+    if (srBentrok(e, auto)) info += '<div style="padding:8px 10px;border-radius:10px;margin:8px 0 0;background:#fde8e8;color:#b91c1c;font-size:13px"><b>⚠ Bentrok:</b> pelatih ini juga mengajar Sekolah Renang pada jam yang sama (' + auto.map(x => 'kelas ' + esc(x.kelas) + ' grup ' + x.grup).join(', ') + ').</div>';
   }
   $('#sInfo').innerHTML = info; $('#sAksi').innerHTML = aksi;
   const bolehIsi = s.mode === 'sr' ? !e : (!e || batalJ(e));
@@ -986,7 +1033,7 @@ function terapkanView(){
   $('#jJudul').textContent = sr ? 'JADWAL TERKONFIRMASI SEKOLAH RENANG' : 'JADWAL TERKONFIRMASI PRIVATE';
   $('#jBantuan').innerHTML = sr
     ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil: <b>1</b> = dihitung 1 pertemuan, <b>cuti</b> = batal tidak dihitung.'
-    : 'Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus.';
+    : 'Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus. Kotak ungu bertulis <b>SR</b> terisi otomatis bila pelatih mengajar Sekolah Renang pada jam itu.';
 }
 function pilihView(v){
   VIEW = v;
