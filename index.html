@@ -73,12 +73,13 @@
   .jgrid th{background:#fff;padding:7px 8px;font-size:13px;color:var(--ink);text-transform:none}
   .jgrid th.jam,.jgrid td.jam{position:sticky;left:0;z-index:1;background:#fff;padding:6px 8px;font-weight:700;white-space:nowrap}
   .jgrid td.istirahat{background:#00b0f0;height:22px}
-  .jcell{display:block;width:100%;min-width:92px;min-height:46px;padding:4px 5px;border:0;background:none;font:inherit;color:inherit;cursor:pointer;word-break:break-word}
+  .jcell{display:block;width:100%;min-width:80px;min-height:46px;padding:4px 5px;border:0;background:none;font:inherit;color:inherit;cursor:pointer;word-break:break-word}
   .jcell.kosong{color:#b8c7cf}
   .jcell:hover{background:rgba(11,110,153,.1)}
   .jcell small{font-size:11px;font-weight:600}
   /* Jadwal Sekolah Renang (kelas x grup, daftar siswa per jam) */
   .jgrid.sr{table-layout:fixed;min-width:1200px}
+  .jgrid:not(.sr) col.cc{width:56px} .jgrid td.paraf{min-width:56px}
   .jgrid.sr col.cj{width:100px} .jgrid.sr col.cc{width:40px}
   .jgrid.sr td{height:25px}
   .jgrid.sr th.kelas{color:#000;font-weight:800;letter-spacing:.6px;padding:6px 4px}
@@ -100,12 +101,13 @@
   body.cetak-jadwal .tablewrap{overflow:visible}
   body.cetak-jadwal .jgrid{table-layout:fixed;width:100%;min-width:0;font-size:var(--fs,9pt)}
   body.cetak-jadwal .jgrid th{padding:2mm 1mm;font-size:var(--fs,9pt);overflow-wrap:anywhere}
-  body.cetak-jadwal .jgrid th.jam,body.cetak-jadwal .jgrid td.jam{position:static;width:22mm;padding:1mm;font-size:var(--fs,9pt)}
+  body.cetak-jadwal .jgrid th.jam,body.cetak-jadwal .jgrid td.jam{position:static;width:26mm;padding:1mm;font-size:var(--fs,9pt)}
   body.cetak-jadwal .jgrid td.istirahat{height:5mm}
   body.cetak-jadwal .jcell{min-width:0;min-height:var(--hrow,12mm);padding:1mm;font-size:var(--fs,9pt);overflow-wrap:anywhere}
   body.cetak-jadwal .jcell small{font-size:.85em}
   body.cetak-jadwal .jcell.kosong{color:transparent}
   body.cetak-jadwal .jgrid.sr{min-width:0}
+  body.cetak-jadwal .jgrid:not(.sr) col.cj{width:26mm} body.cetak-jadwal .jgrid:not(.sr) col.cc{width:9mm}
   body.cetak-jadwal .jgrid.sr col.cj{width:22mm} body.cetak-jadwal .jgrid.sr col.cc{width:7mm}
   body.cetak-jadwal .jgrid.sr th.kelas{padding:1mm;font-size:var(--fs,8pt)}
   body.cetak-jadwal .jgrid.sr th.jam,body.cetak-jadwal .jgrid.sr td.jam{width:auto;padding:.5mm;font-size:calc(var(--fs,8pt)*.85)}
@@ -679,7 +681,7 @@ async function muatJadwal(){
 }
 
 function renderJadwal(){ if (VIEW === 'sr') renderSR(); else renderPrivate(); }
-// Pelatih yang mengajar Sekolah Renang: grup berlabel pelatih DAN ada siswa yang tidak batal.
+// Pelatih yang mengajar Sekolah Renang: setiap grup yang diberi nama pelatih (tanpa syarat jumlah siswa).
 // Hasil: { 'jam|NAMA PELATIH': [{kelas, grup, label, n}] } -> di jadwal private kotaknya otomatis bertulis "SR".
 function petaSR(){
   const m = {}, jml = {};
@@ -690,7 +692,7 @@ function petaSR(){
   });
   JADWAL.forEach(j => {
     if (!j.kelas || j.status !== 'Grup') return;
-    const n = jml[j.jam + '|' + j.kelas + '|' + j.grup]; if (!n) return;
+    const n = jml[j.jam + '|' + j.kelas + '|' + j.grup] || 0;
     String(j.nama).split(/[\/,&]/).map(x => x.trim().toUpperCase()).filter(Boolean).forEach(p => {
       (m[j.jam + '|' + p] = m[j.jam + '|' + p] || []).push({ kelas: j.kelas, grup: j.grup, label: j.nama, n: n });
     });
@@ -700,7 +702,7 @@ function petaSR(){
 function srBentrok(e, auto){ return !!(auto && e && !batalJ(e) && !(e.status === 'Blok' && /^SR/i.test(e.nama))); }
 function infoSR(list){
   return '<div style="padding:8px 10px;border-radius:10px;margin:10px 0 0;background:#d9d2e9"><b>Mengajar Sekolah Renang</b>' +
-    list.map(x => `<div class="hint" style="margin:2px 0 0;color:inherit">Kelas ${esc(x.kelas)} · grup ${x.grup} (${esc(x.label)}) · ${x.n} siswa</div>`).join('') +
+    list.map(x => `<div class="hint" style="margin:2px 0 0;color:inherit">Kelas ${esc(x.kelas)} · grup ${x.grup} (${esc(x.label)}) · ${x.n ? x.n + ' siswa' : 'belum ada siswa'}</div>`).join('') +
     '<div class="hint" style="margin:6px 0 0">Terisi otomatis dari jadwal Sekolah Renang. Untuk mengubahnya, buka tampilan Sekolah Renang.</div></div>';
 }
 
@@ -720,14 +722,16 @@ function renderPrivate(){
   jams.sort();
   const nm = p => p === '' ? '(tanpa pelatih)' : p;
 
-  let h = '<thead><tr><th class="jam">WAKTU</th>' + kolom.map(p => `<th>${esc(nm(p))}</th>`).join('') + '</tr></thead><tbody>';
+  // Tiap pelatih = 2 kolom: nama siswa + kolom kosong untuk paraf manual
+  let h = '<colgroup><col class="cj">' + '<col><col class="cc">'.repeat(kolom.length) + '</colgroup>';
+  h += '<thead><tr><th class="jam">WAKTU</th>' + kolom.map(p => `<th colspan="2">${esc(nm(p))}</th>`).join('') + '</tr></thead><tbody>';
   if (!kolom.length) {
-    h += '<tr><td class="jam"></td><td class="hint" style="padding:16px">Belum ada pelatih. Klik "Atur Pelatih" untuk mengisi daftar pelatih.</td></tr>';
+    h += '<tr><td class="jam"></td><td class="hint" colspan="2" style="padding:16px">Belum ada pelatih. Klik "Atur Pelatih" untuk mengisi daftar pelatih.</td></tr>';
   } else {
     let istirahat = false;
     jams.forEach(jam => {
       if (!istirahat && jam >= '13:00') {
-        h += `<tr><td class="jam">12.00-13.00</td><td class="istirahat" colspan="${kolom.length}"></td></tr>`;
+        h += `<tr><td class="jam">12.00-13.00</td><td class="istirahat" colspan="${kolom.length * 2}"></td></tr>`;
         istirahat = true;
       }
       h += `<tr><td class="jam">${esc(labelJam(jam))}</td>`;
@@ -735,11 +739,13 @@ function renderPrivate(){
         const e = PETA[jam + '|' + c];
         const auto = SR[jam + '|' + String(p).toUpperCase()];
         if (auto && (!e || batalJ(e))) {      // pelatih mengajar Sekolah Renang pada jam ini
-          h += `<td style="background:#d9d2e9;font-weight:600"><button class="jcell" data-jam="${esc(jam)}" data-c="${c}" data-auto="1" title="Mengajar Sekolah Renang">SR</button></td>`;
+          h += `<td colspan="2" style="background:#d9d2e9;font-weight:600"><button class="jcell" data-jam="${esc(jam)}" data-c="${c}" data-auto="1" title="Mengajar Sekolah Renang">SR</button></td>`;
           return;
         }
         const bentrok = srBentrok(e, auto);
-        h += `<td style="${e ? gayaEntry(e) : ''}"><button class="jcell${e ? '' : ' kosong'}" data-jam="${esc(jam)}" data-c="${c}">${e ? isiEntry(e) + (bentrok ? '<small style="display:block;color:#b91c1c">⚠ juga mengajar SR</small>' : '') : '+'}</button></td>`;
+        const blok = e && e.status === 'Blok';   // label kelas melebar menutupi kolom paraf
+        h += `<td${blok ? ' colspan="2"' : ''} style="${e ? gayaEntry(e) : ''}"><button class="jcell${e ? '' : ' kosong'}" data-jam="${esc(jam)}" data-c="${c}">${e ? isiEntry(e) + (bentrok ? '<small style="display:block;color:#b91c1c">⚠ juga mengajar SR</small>' : '') : '+'}</button></td>`;
+        if (!blok) h += `<td class="paraf" style="${e ? gayaEntry(e) : ''}"></td>`;
       });
       h += '</tr>';
     });
@@ -904,9 +910,9 @@ const EXTRA_SR = {};   // jam tambahan yang dibuka manual, per tanggal
 function hariKe(tgl){ return new Date(tgl + 'T12:00:00Z').getUTCDay(); }
 
 function selSR(e){
-  let gaya = 'background:#fff6e5', nama = esc(tampil(e)), hit = '1';
+  let gaya = 'background:#fff6e5', nama = esc(tampil(e)), hit = '';   // kolom kecil dikosongkan untuk paraf manual
   if (e.status === 'Hadir') { gaya = 'background:#e8f8ee'; nama = '✓ ' + nama; }
-  else if (e.status === 'Batal (tidak dihitung)') { gaya = 'background:#fff4e0;color:#b45309'; hit = 'cuti'; }
+  else if (e.status === 'Batal (tidak dihitung)') { gaya = 'background:#fff4e0;color:#b45309'; }
   else if (e.status === 'Batal (dihitung)') { gaya = 'background:#fde8e8;color:#b91c1c'; nama = '<s>' + nama + '</s>'; }
   return { gaya: gaya, nama: nama, hit: hit };
 }
@@ -1032,8 +1038,8 @@ function terapkanView(){
   $('#btnJamLain').classList.toggle('hidden', !sr);
   $('#jJudul').textContent = sr ? 'JADWAL TERKONFIRMASI SEKOLAH RENANG' : 'JADWAL TERKONFIRMASI PRIVATE';
   $('#jBantuan').innerHTML = sr
-    ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil: <b>1</b> = dihitung 1 pertemuan, <b>cuti</b> = batal tidak dihitung.'
-    : 'Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus. Kotak ungu bertulis <b>SR</b> terisi otomatis bila pelatih mengajar Sekolah Renang pada jam itu.';
+    ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil di sebelah nama dikosongkan untuk paraf absen manual.'
+    : 'Kolom kosong di sebelah nama untuk paraf manual. Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus. Kotak ungu bertulis <b>SR</b> terisi otomatis bila pelatih mengajar Sekolah Renang pada jam itu.';
 }
 function pilihView(v){
   VIEW = v;
