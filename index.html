@@ -295,6 +295,19 @@
 </div>
 
 <!-- MODAL PELATIH GRUP (Sekolah Renang) -->
+<div id="modalKabar" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:45;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:380px;width:100%">
+    <h2 id="kJudul" style="margin-bottom:2px">Batalkan kehadiran</h2>
+    <div id="kInfo" class="hint" style="margin:0"></div>
+    <label>Kapan orang tua mengabari?</label>
+    <input type="datetime-local" id="kWaktu">
+    <div id="kHasil" style="margin-top:10px;padding:8px 10px;border-radius:10px;font-size:13px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn danger" id="btnKabarOk">Batalkan</button>
+      <button class="btn sec" id="btnKabarTutup">Kembali</button>
+    </div>
+  </div>
+</div>
 <div id="modalGrup" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
   <div style="background:#fff;border-radius:16px;padding:18px;max-width:380px;width:100%">
     <h2 id="gJudul" style="margin-bottom:2px"></h2>
@@ -344,7 +357,7 @@
 // =====================================================================
 // WAJIB DIISI: tempel URL Web App Apps Script Anda (yang berakhiran /exec)
 // =====================================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbxoDoMWXlv4mQOUzPt9WsMJAioG4vogDQwCpkGbWPAP53XBj5o3jhAoZepNEMg6rX5E/exec';
+const API_URL = 'GANTI_DENGAN_URL_WEB_APP_ANDA';
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
@@ -853,20 +866,46 @@ $('#sAksi').addEventListener('click', async ev => {
   if (b.id === 'sHapus') {
     if (!confirm('Hapus "' + e.nama + '" dari jadwal ini?\nIni untuk salah input, bukan pembatalan.')) return;
   } else if (b.id === 'sBatal') {
-    const mulai = new Date(e.tanggal + 'T' + e.jam + ':00' + OFFSET_WIB);
-    const menit = Math.round((mulai.getTime() - Date.now()) / 60000);
-    const dihitung = menit < BATAS;
-    const ket = menit >= 0 ? menit + ' menit sebelum jam mulai' : 'sudah lewat jam mulai';
-    if (!confirm('Batalkan kehadiran ' + e.nama + ' (jam ' + e.jam + ')?\n\nSaat ini ' + ket + '.\n' +
-      (dihitung ? 'Pembatalan ini TETAP DIHITUNG (sisa pertemuan berkurang 1).' : 'Pembatalan ini TIDAK dihitung (sisa pertemuan tetap).'))) return;
+    bukaKabar(e); return;
   } else return;
   b.disabled = true;
   try {
     if (b.id === 'sHapus') { await run('hapusSlot', e.row, e.id || e.nama); toast('Dihapus dari jadwal'); }
-    else { const r = await run('batalJadwal', e.row, e.id); toast(r.dihitung ? 'Dibatalkan: tetap dihitung' : 'Dibatalkan: tidak dihitung'); muatSiswa(); }
     $('#modalSlot').classList.add('hidden'); muatJadwal();
   } catch(err){ toast(err.message); b.disabled = false; }
 });
+
+// Pembatalan: admin mengisi jam orang tua mengabari (bukan jam admin menekan tombol)
+let kabarEntry = null;
+function nowWIB(){ return new Date(Date.now() + 7*3600*1000).toISOString().slice(0,16); }
+function hitungKabar(){
+  const e = kabarEntry, v = $('#kWaktu').value, box = $('#kHasil');
+  if (!v) { box.textContent = 'Isi jam kabar dari orang tua.'; box.style.cssText += ';background:#eee;color:#333'; return null; }
+  const mulai = new Date(e.tanggal + 'T' + e.jam + ':00' + OFFSET_WIB), kabar = new Date(v + ':00' + OFFSET_WIB);
+  const menit = Math.round((mulai - kabar) / 60000), dihitung = menit < BATAS;
+  box.textContent = (menit >= 0 ? 'Dikabari ' + menit + ' menit sebelum jam mulai. ' : 'Dikabari setelah jam mulai. ') +
+    (dihitung ? 'TETAP DIHITUNG (sisa pertemuan berkurang 1).' : 'TIDAK dihitung (sisa pertemuan tetap).');
+  box.style.background = dihitung ? '#fde8e8' : '#e8f8ee'; box.style.color = dihitung ? '#b91c1c' : '#166534';
+  return v;
+}
+function bukaKabar(e){
+  kabarEntry = e;
+  $('#kInfo').textContent = e.nama + ' · ' + tglPanjang(e.tanggal) + ' · jam ' + e.jam;
+  $('#kWaktu').value = nowWIB(); $('#kWaktu').max = nowWIB();
+  hitungKabar(); $('#modalKabar').classList.remove('hidden');
+}
+$('#kWaktu').addEventListener('input', hitungKabar);
+$('#btnKabarTutup').onclick = () => $('#modalKabar').classList.add('hidden');
+$('#btnKabarOk').onclick = async () => {
+  const v = hitungKabar(); if (!v || !kabarEntry) return;
+  const b = $('#btnKabarOk'); b.disabled = true;
+  try {
+    const r = await run('batalJadwal', kabarEntry.row, kabarEntry.id, v);
+    toast(r.dihitung ? 'Dibatalkan: tetap dihitung' : 'Dibatalkan: tidak dihitung');
+    $('#modalKabar').classList.add('hidden'); $('#modalSlot').classList.add('hidden'); muatSiswa(); muatJadwal();
+  } catch(err){ toast(err.message); }
+  b.disabled = false;
+};
 
 // ----- atur pelatih, salin, cetak -----
 $('#btnPelatih').onclick = () => {
