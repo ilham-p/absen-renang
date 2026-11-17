@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Absensi Les Berenang</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#f2f7fa; --card:#fff; --ink:#12303d; --mute:#6b8591; --line:#dbe7ed;
@@ -53,6 +51,8 @@
   .acts{display:flex;gap:4px;flex-wrap:wrap}
   .hidden{display:none!important}
   #login{max-width:340px;margin:12vh auto;text-align:center}
+  #loadbar{position:fixed;top:0;left:0;height:3px;width:0;background:#0b6e99;z-index:60;opacity:0;transition:width .4s,opacity .3s}
+  #loadbar.on{opacity:1;width:80%;transition:width 6s cubic-bezier(.1,.7,.3,1)}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#12303d;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:90%}
   #toast.show{opacity:1}
   #modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px}
@@ -124,6 +124,7 @@
 </style>
 </head>
 <body>
+<div id="loadbar"></div>
 
 <!-- LOGIN -->
 <div id="login" class="card">
@@ -426,7 +427,31 @@ function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2800); }
 
 // Panggil API Apps Script. Tanpa header khusus agar tidak memicu preflight CORS.
+// Pustaka kamera/QR dimuat belakangan (tidak menahan tampilan awal), dan dimuat sekali saja
+const LIB = { kamera: ['https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js', () => window.Html5Qrcode],
+              qr: ['https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', () => window.QRCode] };
+const LIB_P = {};
+function pakaiLib(k){
+  if (LIB[k][1]()) return Promise.resolve();
+  if (!LIB_P[k]) LIB_P[k] = new Promise((ok, gagal) => {
+    const el = document.createElement('script'); el.src = LIB[k][0];
+    el.onload = ok; el.onerror = () => { delete LIB_P[k]; gagal(new Error('Gagal memuat pustaka. Periksa internet.')); };
+    document.head.appendChild(el);
+  });
+  return LIB_P[k];
+}
+let SEDANG = 0;   // jumlah permintaan ke server yang berjalan -> garis biru di atas layar
+function bar(delta){
+  SEDANG = Math.max(0, SEDANG + delta);
+  const el = document.getElementById('loadbar');
+  if (SEDANG) { el.classList.add('on'); }
+  else { el.classList.remove('on'); el.style.width = '100%'; setTimeout(() => { if (!SEDANG) el.style.width = ''; }, 350); }
+}
 async function run(fn, ...args){
+  bar(1);
+  try { return await runInti(fn, ...args); } finally { bar(-1); }
+}
+async function runInti(fn, ...args){
   if (API_URL.indexOf('GANTI_') === 0) throw new Error('API_URL di index.html belum diisi');
   let res;
   try {
@@ -444,12 +469,14 @@ async function run(fn, ...args){
 async function login(pin){
   PIN = pin;
   try {
-    await run('cekPin');
+    SISWA = await run('getSiswa');   // sekaligus memeriksa PIN: satu permintaan, bukan dua
+    TS_SISWA = Date.now();
     sessionStorage.setItem('pin', pin);
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
-    await muatSiswa();
+    renderSiswa(); isiFilter(); renderPilih();
     $('#manualId').focus();
+    setTimeout(() => { pakaiLib('kamera').catch(() => {}); }, 300);   // siapkan pemindai selagi admin melihat layar
   } catch(e){
     PIN = ''; sessionStorage.removeItem('pin');
     $('#loginErr').textContent = e.message;
@@ -469,14 +496,17 @@ $$('nav button').forEach(b => b.onclick = () => {
   ['scan','jadwal','siswa','riwayat'].forEach(t => $('#tab-'+t).classList.toggle('hidden', t !== b.dataset.tab));
   if (b.dataset.tab !== 'scan') stopKamera();
   if (b.dataset.tab === 'riwayat') muatRiwayat();
-  if (b.dataset.tab === 'siswa') muatSiswa();
-  if (b.dataset.tab === 'jadwal') { muatSiswa(); muatJadwal(); }
+  if (b.dataset.tab === 'siswa') muatSiswaHemat();
+  if (b.dataset.tab === 'jadwal') { muatSiswaHemat(); muatJadwal(); }
 });
 
 // ---------- SISWA ----------
+let TS_SISWA = 0;
 async function muatSiswa(){
-  try { SISWA = await run('getSiswa'); renderSiswa(); isiFilter(); renderPilih(); } catch(e){ toast(e.message); }
+  try { SISWA = await run('getSiswa'); TS_SISWA = Date.now(); renderSiswa(); isiFilter(); renderPilih(); } catch(e){ toast(e.message); }
 }
+// Untuk pindah tab: pakai data yang masih segar (< 60 detik), tidak perlu minta ulang ke server
+function muatSiswaHemat(){ return SISWA.length && Date.now() - TS_SISWA < 60000 ? Promise.resolve() : muatSiswa(); }
 function renderSiswa(){
   const q = $('#cari').value.trim().toLowerCase();
   const pf = $('#cariProgram').value;
@@ -545,9 +575,10 @@ $('#tbSiswa').addEventListener('click', async e => {
 });
 
 // ---------- QR KARTU ----------
-function bukaQR(s){
+async function bukaQR(s){
   kartuAktif = s;
   $('#qrbox').innerHTML = '';
+  try { await pakaiLib('qr'); } catch(e){ return toast(e.message); }
   new QRCode($('#qrbox'), { text: s.id, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.M });
   $('#kNama').textContent = s.nama;
   $('#kId').textContent = s.id;
@@ -617,6 +648,7 @@ async function prosesKode(teks){
 async function mulaiKamera(){
   $('#kameraErr').textContent = '';
   try {
+    await pakaiLib('kamera');
     if (!scanner) scanner = new Html5Qrcode('reader');
     await scanner.start({ facingMode:'environment' }, { fps:10, qrbox:{ width:230, height:230 } }, t => prosesKode(t), () => {});
     kameraAktif = true; $('#btnKamera').textContent = 'Matikan Kamera';
@@ -635,6 +667,7 @@ $('#btnFoto').onclick = () => $('#fileQR').click();
 $('#fileQR').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   try {
+    await pakaiLib('kamera');
     const h = new Html5Qrcode('reader-file');
     const teks = await h.scanFile(f, false);
     lastKode = ''; prosesKode(teks);
@@ -745,7 +778,7 @@ async function muatJadwal(){
     const d = await run('getJadwal', tgl);
     JADWAL = d.rows; BATAS = d.batas; PELATIH = d.pelatih || [];
     if (d.jamSR) JAM_SR = d.jamSR;   // jam kelas hasil pengaturan admin
-    if (!window.__pgMuat) { window.__pgMuat = 1; muatPengganti(); }
+    if (d.perluPengganti != null) badgePengganti(d.perluPengganti);
     renderJadwal();
   } catch(e){ toast(e.message); }
 }
@@ -1162,12 +1195,15 @@ $('#gLabel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preve
 
 // ----- Perlu jadwal pengganti -----
 let PENGGANTI = [], pgAktif = null;
+function badgePengganti(n){
+  $('#btnPengganti').textContent = '🔁 Perlu pengganti' + (n ? ' (' + n + ')' : '');
+  $('#btnPengganti').classList.toggle('sec', !n);
+}
 async function muatPengganti(){
   try {
     const d = await run('getPerluPengganti');
     PENGGANTI = d.rows || [];
-    $('#btnPengganti').textContent = '🔁 Perlu pengganti' + (PENGGANTI.length ? ' (' + PENGGANTI.length + ')' : '');
-    $('#btnPengganti').classList.toggle('sec', !PENGGANTI.length);
+    badgePengganti(PENGGANTI.length);
     if (!$('#modalPengganti').classList.contains('hidden')) renderPengganti();
   } catch(e){ /* biarkan senyap; jadwal tetap jalan */ }
 }
