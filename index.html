@@ -189,6 +189,7 @@
           <button class="btn sec" id="btnSalin">📋 Salin dari tanggal lain</button>
           <button class="btn sec hidden" id="btnJamLain">➕ Jam lain</button>
           <button class="btn sec hidden" id="btnAturJam">⏰ Atur jam kelas</button>
+          <button class="btn sec" id="btnPengganti">🔁 Perlu pengganti</button>
           <button class="btn sec" id="btnPantau">✅ Tanda hadir: mati</button>
           <button class="btn sec" id="btnUnduhJadwal">⬇️ Unduh</button>
           <button class="btn sec" id="btnCetakJadwal">🖨️ Cetak</button>
@@ -328,6 +329,25 @@
 </div>
 
 <!-- MODAL ATUR PELATIH -->
+<div id="modalPengganti" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:42;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto">
+    <h2 style="margin-bottom:2px">Perlu jadwal pengganti</h2>
+    <div class="hint" style="margin:0 0 8px">Siswa yang membatalkan tanpa dihitung (sisa pertemuan masih utuh) dan belum dicarikan jadwal baru. Yang tertua di atas.</div>
+    <div id="pgList"></div>
+    <div id="pgForm" class="hidden" style="margin-top:12px;padding:12px;border:1px solid #cfdde4;border-radius:12px;background:#f6fafc">
+      <b id="pgJudul"></b>
+      <div id="pgAsal" class="hint" style="margin:2px 0 6px"></div>
+      <label>Tanggal pengganti</label><input type="date" id="pgTgl">
+      <label>Jam mulai</label><select id="pgJam"></select>
+      <label>Jenis</label>
+      <select id="pgTipe"><option value="private">Private / terapi (pilih pelatih)</option><option value="sr">Sekolah Renang (pilih kelas &amp; grup)</option></select>
+      <div id="pgPrivate"><label>Pelatih</label><select id="pgPel"></select></div>
+      <div id="pgSR" class="hidden"><div class="row"><div><label>Kelas</label><select id="pgKelas"></select></div><div><label>Grup</label><select id="pgGrup"><option>1</option><option>2</option></select></div></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="btnPgSimpan">Jadwalkan</button><button class="btn sec" id="btnPgBatal">Kembali</button></div>
+    </div>
+    <div style="margin-top:12px;text-align:right"><button class="btn sec" id="btnPgTutup">Tutup</button></div>
+  </div>
+</div>
 <div id="modalKBM" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
   <div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:90vh;overflow:auto">
     <h2 style="margin-bottom:2px">Program KBM</h2>
@@ -725,6 +745,7 @@ async function muatJadwal(){
     const d = await run('getJadwal', tgl);
     JADWAL = d.rows; BATAS = d.batas; PELATIH = d.pelatih || [];
     if (d.jamSR) JAM_SR = d.jamSR;   // jam kelas hasil pengaturan admin
+    if (!window.__pgMuat) { window.__pgMuat = 1; muatPengganti(); }
     renderJadwal();
   } catch(e){ toast(e.message); }
 }
@@ -986,7 +1007,7 @@ $('#btnKabarOk').onclick = async () => {
   try {
     const r = await run('batalJadwal', kabarEntry.row, kabarEntry.id, v);
     toast(r.dihitung ? 'Dibatalkan: tetap dihitung' : 'Dibatalkan: tidak dihitung');
-    $('#modalKabar').classList.add('hidden'); $('#modalSlot').classList.add('hidden'); muatSiswa(); muatJadwal();
+    $('#modalKabar').classList.add('hidden'); $('#modalSlot').classList.add('hidden'); muatSiswa(); muatJadwal(); muatPengganti();
   } catch(err){ toast(err.message); }
   b.disabled = false;
 };
@@ -1138,6 +1159,73 @@ $('#btnSimpanGrup').onclick = () => simpanGrup(false);
 $('#btnKosongGrup').onclick = () => simpanGrup(true);
 $('#btnBatalGrup').onclick = () => $('#modalGrup').classList.add('hidden');
 $('#gLabel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); simpanGrup(false); } });
+
+// ----- Perlu jadwal pengganti -----
+let PENGGANTI = [], pgAktif = null;
+async function muatPengganti(){
+  try {
+    const d = await run('getPerluPengganti');
+    PENGGANTI = d.rows || [];
+    $('#btnPengganti').textContent = '🔁 Perlu pengganti' + (PENGGANTI.length ? ' (' + PENGGANTI.length + ')' : '');
+    $('#btnPengganti').classList.toggle('sec', !PENGGANTI.length);
+    if (!$('#modalPengganti').classList.contains('hidden')) renderPengganti();
+  } catch(e){ /* biarkan senyap; jadwal tetap jalan */ }
+}
+function renderPengganti(){
+  $('#pgList').innerHTML = PENGGANTI.length ? PENGGANTI.map((x, i) => {
+    const di = x.kelas ? 'Sekolah Renang ' + esc(x.kelas) + ' grup ' + x.grup + (x.pelatih ? ' (' + esc(x.pelatih) + ')' : '') : 'Private' + (x.pelatih ? ' · ' + esc(x.pelatih) : '');
+    return `<div style="border:1px solid #cfdde4;border-radius:12px;padding:10px;margin-bottom:8px">
+      <div><b>${esc(x.tampil)}</b>${x.tampil !== x.nama ? ' <span class="hint">(' + esc(x.nama) + ')</span>' : ''} <span class="hint">· ${esc(x.program || 'tanpa program')}${x.sisa != null ? ' · sisa ' + x.sisa : ''}</span></div>
+      <div class="hint" style="margin:2px 0">Batal: ${esc(tglPanjang(x.tanggal))} · ${esc(labelJam(x.jam))} · ${di}</div>
+      <div class="hint" style="margin:2px 0">${x.kabar ? 'Kabar orang tua: ' + esc(x.kabar) + ' · ' : ''}${x.telepon ? 'Telp: <a href="tel:' + esc(x.telepon) + '">' + esc(x.telepon) + '</a>' : 'tanpa nomor telepon'}</div>
+      <div class="row" style="margin-top:6px"><button class="btn sm" data-pg="jadwal" data-i="${i}">Jadwalkan pengganti</button><button class="btn sm sec" data-pg="tidak" data-i="${i}">Tidak perlu</button></div>
+    </div>`;
+  }).join('') : '<div class="hint" style="padding:12px 0">Tidak ada siswa yang menunggu jadwal pengganti. 🎉</div>';
+}
+function jamPengganti(){
+  const set = {}; JAM_DEFAULT.forEach(j => set[j] = 1);
+  Object.keys(JAM_SR).forEach(h => (JAM_SR[h] || []).forEach(j => set[j] = 1));
+  return Object.keys(set).sort();
+}
+function aturTipePg(){ const sr = $('#pgTipe').value === 'sr'; $('#pgPrivate').classList.toggle('hidden', sr); $('#pgSR').classList.toggle('hidden', !sr); }
+$('#pgTipe').onchange = aturTipePg;
+$('#btnPengganti').onclick = () => { $('#pgForm').classList.add('hidden'); renderPengganti(); $('#modalPengganti').classList.remove('hidden'); muatPengganti(); };
+$('#btnPgTutup').onclick = () => $('#modalPengganti').classList.add('hidden');
+$('#btnPgBatal').onclick = () => $('#pgForm').classList.add('hidden');
+$('#pgList').addEventListener('click', async ev => {
+  const b = ev.target.closest('button[data-pg]'); if (!b) return;
+  const x = PENGGANTI[Number(b.dataset.i)]; if (!x) return;
+  if (b.dataset.pg === 'tidak') {
+    if (!confirm('Tandai ' + x.nama + ' tidak perlu jadwal pengganti?\\nSiswa ini akan hilang dari daftar.')) return;
+    b.disabled = true;
+    try { await run('tanpaPengganti', x.row, x.id); toast('Dihapus dari daftar'); muatPengganti(); } catch(e){ toast(e.message); b.disabled = false; }
+    return;
+  }
+  pgAktif = x;
+  $('#pgJudul').textContent = 'Pengganti untuk ' + x.tampil;
+  $('#pgAsal').textContent = 'Asal: ' + tglPanjang(x.tanggal) + ' · ' + labelJam(x.jam);
+  $('#pgTgl').value = ''; $('#pgTgl').min = new Date(Date.now() + 7*3600*1000).toISOString().slice(0, 10);
+  $('#pgJam').innerHTML = jamPengganti().map(j => `<option value="${j}"${j === x.jam ? ' selected' : ''}>${esc(labelJam(j))}</option>`).join('');
+  $('#pgPel').innerHTML = PELATIH.map(p => `<option${p === x.pelatih ? ' selected' : ''}>${esc(p)}</option>`).join('');
+  $('#pgKelas').innerHTML = KELAS.map(k => `<option${k === x.kelas ? ' selected' : ''}>${k}</option>`).join('');
+  $('#pgGrup').value = x.grup === 2 ? '2' : '1';
+  $('#pgTipe').value = x.kelas ? 'sr' : 'private'; aturTipePg();
+  $('#pgForm').classList.remove('hidden'); $('#pgForm').scrollIntoView({ block: 'nearest' });
+});
+$('#btnPgSimpan').onclick = async () => {
+  const x = pgAktif; if (!x) return;
+  const tgl = $('#pgTgl').value; if (!tgl) return toast('Pilih tanggal pengganti');
+  const sr = $('#pgTipe').value === 'sr';
+  if (!sr && !$('#pgPel').value) return toast('Pilih pelatih (isi dulu lewat Atur Pelatih)');
+  const b = $('#btnPgSimpan'); b.disabled = true;
+  try {
+    await run('jadwalkanPengganti', x.row, x.id, tgl, $('#pgJam').value, sr ? 'sr' : 'private', sr ? '' : $('#pgPel').value, sr ? $('#pgKelas').value : '', sr ? Number($('#pgGrup').value) : 0);
+    toast(x.tampil + ' dijadwalkan ' + tgl + ' ' + $('#pgJam').value);
+    $('#pgForm').classList.add('hidden'); pgAktif = null;
+    muatPengganti(); muatJadwal();
+  } catch(e){ toast(e.message); }
+  b.disabled = false;
+};
 
 // ----- Program KBM: blok beberapa pelatih x beberapa jam, bertulis nama sekolah -----
 const JAM_SELESAI = JAM_DEFAULT.concat(['17:00']);
