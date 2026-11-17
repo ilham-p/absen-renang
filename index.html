@@ -185,6 +185,7 @@
         </div>
         <div class="row noprint" style="margin:12px 0 8px">
           <button class="btn sec" id="btnPelatih">👤 Atur Pelatih</button>
+          <button class="btn sec" id="btnKBM">🏫 Isi KBM</button>
           <button class="btn sec" id="btnSalin">📋 Salin dari tanggal lain</button>
           <button class="btn sec hidden" id="btnJamLain">➕ Jam lain</button>
           <button class="btn sec hidden" id="btnAturJam">⏰ Atur jam kelas</button>
@@ -325,6 +326,26 @@
 </div>
 
 <!-- MODAL ATUR PELATIH -->
+<div id="modalKBM" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
+  <div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:90vh;overflow:auto">
+    <h2 style="margin-bottom:2px">Program KBM</h2>
+    <div class="hint" style="margin:0 0 6px">Blok pelatih yang memegang KBM supaya jamnya tidak diisi siswa private/terapi. Tulisan di kotak = nama sekolah.</div>
+    <label>Nama sekolah</label>
+    <input id="kSekolah" list="kSekolahList" autocomplete="off" placeholder="Contoh: SDN 1 CONTOH">
+    <datalist id="kSekolahList"></datalist>
+    <div class="row" style="margin-top:8px">
+      <div><label>Jam mulai</label><select id="kMulai"></select></div>
+      <div><label>Sampai jam (tidak termasuk)</label><select id="kSelesai"></select></div>
+    </div>
+    <label style="margin-top:8px">Pelatih yang pegang KBM</label>
+    <div id="kPelatih" class="acts" style="margin-top:4px"></div>
+    <div id="kRingkas" class="hint" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="btnSimpanKBM">Simpan</button>
+      <button class="btn sec" id="btnTutupKBM">Batal</button>
+    </div>
+  </div>
+</div>
 <div id="modalJam" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:40;padding:16px">
   <div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:90vh;overflow:auto">
     <h2 style="margin-bottom:2px">Jam kelas Sekolah Renang</h2>
@@ -681,7 +702,7 @@ function warnaBlok(l){
   return '#e0e6ea';
 }
 function gayaEntry(j){
-  if (j.status === 'Blok') return 'background:' + warnaBlok(j.nama) + ';font-weight:600';
+  if (j.status === 'Blok') return 'background:' + (j.ket === 'KBM' ? '#b6e3dc' : warnaBlok(j.nama)) + ';font-weight:600';
   if (j.status === 'Hadir') return 'background:#e8f8ee';
   if (j.status === 'Batal (tidak dihitung)') return 'background:#fff4e0;color:#b45309';
   if (j.status === 'Batal (dihitung)') return 'background:#fde8e8;color:#b91c1c';
@@ -1068,6 +1089,45 @@ $('#btnKosongGrup').onclick = () => simpanGrup(true);
 $('#btnBatalGrup').onclick = () => $('#modalGrup').classList.add('hidden');
 $('#gLabel').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); simpanGrup(false); } });
 
+// ----- Program KBM: blok beberapa pelatih x beberapa jam, bertulis nama sekolah -----
+const JAM_SELESAI = JAM_DEFAULT.concat(['17:00']);
+function jamKBM(){
+  const a = $('#kMulai').value, b = $('#kSelesai').value;
+  return JAM_DEFAULT.filter(j => j >= a && j < b);
+}
+function ringkasKBM(){
+  const jm = jamKBM(), pl = Array.from(document.querySelectorAll('#kPelatih input:checked')).map(x => x.value);
+  $('#kRingkas').textContent = jm.length && pl.length ? jm.length + ' jam × ' + pl.length + ' pelatih = ' + jm.length * pl.length + ' kotak (' + jm.map(labelJam).join(', ') + ')' : 'Pilih jam dan minimal satu pelatih.';
+  return { jm: jm, pl: pl };
+}
+$('#btnKBM').onclick = () => {
+  if (!PELATIH.length) return toast('Isi daftar pelatih dulu lewat Atur Pelatih');
+  $('#kMulai').innerHTML = JAM_DEFAULT.map(j => `<option value="${j}">${j}</option>`).join('');
+  $('#kSelesai').innerHTML = JAM_SELESAI.map(j => `<option value="${j}">${j}</option>`).join('');
+  $('#kSelesai').value = '10:00'; $('#kMulai').value = '08:00';
+  $('#kPelatih').innerHTML = PELATIH.map((p, i) => `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 8px 6px 0;font-weight:500"><input type="checkbox" value="${esc(p)}" style="width:auto"> ${esc(p)}</label>`).join('');
+  const nama = {}; JADWAL.forEach(j => { if (j.ket === 'KBM') nama[j.nama] = 1; });
+  $('#kSekolahList').innerHTML = Object.keys(nama).map(n => `<option value="${esc(n)}">`).join('');
+  $('#kSekolah').value = ''; ringkasKBM(); $('#modalKBM').classList.remove('hidden');
+};
+['#kMulai', '#kSelesai'].forEach(id => $(id).addEventListener('change', ringkasKBM));
+$('#kPelatih').addEventListener('change', ringkasKBM);
+$('#btnTutupKBM').onclick = () => $('#modalKBM').classList.add('hidden');
+$('#btnSimpanKBM').onclick = async () => {
+  const sek = $('#kSekolah').value.trim(), r = ringkasKBM();
+  if (!sek) return toast('Isi nama sekolah');
+  if (!r.jm.length || !r.pl.length) return toast('Pilih jam dan minimal satu pelatih');
+  const b = $('#btnSimpanKBM'); b.disabled = true;
+  try {
+    const d = await run('isiKBM', $('#jTgl').value, r.jm, r.pl, sek);
+    $('#modalKBM').classList.add('hidden');
+    toast(d.ditambah + ' kotak KBM ditambahkan' + (d.dilewati.length ? ', ' + d.dilewati.length + ' dilewati' : ''));
+    if (d.dilewati.length) alert('Kotak yang dilewati:\n' + d.dilewati.map(x => '• ' + labelJam(x.jam) + ' ' + x.pelatih + ' — ' + x.alasan).join('\n'));
+    muatJadwal();
+  } catch(e){ toast(e.message); }
+  b.disabled = false;
+};
+
 // ----- atur jam kelas Sekolah Renang (tersimpan di server, berlaku untuk semua admin) -----
 const URUT_HARI = [[1,'Senin'],[2,'Selasa'],[3,'Rabu'],[4,'Kamis'],[5,'Jumat'],[6,'Sabtu'],[0,'Minggu']];
 $('#btnAturJam').onclick = () => {
@@ -1111,11 +1171,12 @@ function terapkanView(){
   $('#vPrivate').classList.toggle('sec', sr);
   $('#vSR').classList.toggle('sec', !sr);
   $('#btnJamLain').classList.toggle('hidden', !sr);
+  $('#btnKBM').classList.toggle('hidden', sr);
   $('#btnAturJam').classList.toggle('hidden', !sr);
   $('#jJudul').textContent = sr ? 'JADWAL TERKONFIRMASI SEKOLAH RENANG' : 'JADWAL TERKONFIRMASI PRIVATE';
   $('#jBantuan').innerHTML = sr
     ? 'Klik <b>+</b> di bawah daftar nama untuk menambah siswa, klik kotak abu-abu untuk mengisi pelatih grup, klik nama siswa untuk membatalkan kehadiran. Kolom kecil di sebelah nama dikosongkan untuk paraf absen manual.'
-    : 'Kolom kosong di sebelah nama untuk paraf manual. Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus. Kotak ungu bertulis <b>SR</b> terisi otomatis bila pelatih mengajar Sekolah Renang pada jam itu.';
+    : 'Kolom kosong di sebelah nama untuk paraf manual. Klik kotak kosong (+) untuk mengisi siswa atau kelas. Klik kotak berisi untuk membatalkan kehadiran atau menghapus. Kotak ungu bertulis <b>SR</b> terisi otomatis bila pelatih mengajar Sekolah Renang pada jam itu. Tombol <b>Isi KBM</b> memblok pelatih KBM (kotak hijau toska bertulis nama sekolah).';
 }
 function pilihView(v){
   VIEW = v;
